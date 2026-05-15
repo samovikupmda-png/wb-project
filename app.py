@@ -253,7 +253,10 @@ def apply_variant_photo(test_id, variant_id):
     if success:
         flash(f'Обложка «{variant.name}» применена на WB как главное фото', 'success')
     else:
-        flash(f'Ошибка: {msg}', 'error')
+        if 'forbidden' in msg.lower() or '403' in msg:
+            flash('Ошибка доступа WB: проверьте API ключ контента — нужен ключ с правами на управление карточками товаров', 'error')
+        else:
+            flash(f'Ошибка WB API: {msg}', 'error')
     return redirect(url_for('ab_test_detail', test_id=test_id))
 
 
