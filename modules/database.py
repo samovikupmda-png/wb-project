@@ -33,7 +33,7 @@ class ABTest(db.Model):
     rotation_interval = db.Column(db.Integer, default=30)  # minutes
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
-    variants = db.relationship('ABVariant', backref='test', lazy=True)
+    variants = db.relationship('ABVariant', backref='test', lazy=True, cascade='all, delete-orphan')
 
 
 class ABVariant(db.Model):
