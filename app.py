@@ -20,11 +20,16 @@ with app.app_context():
     db.create_all()
     from sqlalchemy import text
     with db.engine.connect() as conn:
-        try:
-            conn.execute(text('ALTER TABLE ab_test ADD COLUMN campaign_type VARCHAR(32) DEFAULT "manual"'))
-            conn.commit()
-        except Exception:
-            pass
+        for sql in [
+            'ALTER TABLE ab_test ADD COLUMN campaign_type VARCHAR(32) DEFAULT "manual"',
+            'ALTER TABLE ab_test ADD COLUMN campaign_id INTEGER',
+            'ALTER TABLE ab_test ADD COLUMN campaign_name VARCHAR(256) DEFAULT ""',
+        ]:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass
     if not Settings.query.first():
         db.session.add(Settings())
         db.session.commit()
@@ -105,7 +110,10 @@ def create_ab_test():
         return redirect(url_for('ab_tests'))
 
     campaign_type = request.form.get('campaign_type', 'manual')
-    test = ab_module.create_test(product_id, name, target_ctr, min_impressions, rotation_interval, campaign_type)
+    campaign_id = request.form.get('campaign_id') or None
+    campaign_name = request.form.get('campaign_name', '')
+    test = ab_module.create_test(product_id, name, target_ctr, min_impressions,
+                                  rotation_interval, campaign_type, campaign_id, campaign_name)
     flash(f'Тест «{name}» создан', 'success')
     return redirect(url_for('ab_test_detail', test_id=test.id))
 
@@ -193,6 +201,60 @@ def save_settings():
     db.session.commit()
     flash('Настройки сохранены', 'success')
     return redirect(url_for('settings'))
+
+
+# ── WB API ───────────────────────────────────────────────────────────────────
+
+@app.route('/api/wb/campaigns')
+def api_wb_campaigns():
+    s = Settings.query.first()
+    if not s or not s.wb_stats_api_key:
+        return jsonify({'error': 'API ключ не настроен'}), 400
+    from modules import wb_api
+    campaigns = wb_api.get_active_campaigns(s.wb_stats_api_key)
+    return jsonify(campaigns)
+
+
+@app.route('/ab-tests/<int:test_id>/sync', methods=['POST'])
+def sync_test_stats(test_id):
+    test = ABTest.query.get_or_404(test_id)
+    s = Settings.query.first()
+    if not s or not s.wb_stats_api_key:
+        flash('Настройте API ключ WB Stats в настройках', 'error')
+        return redirect(url_for('ab_test_detail', test_id=test_id))
+    if not test.campaign_id:
+        flash('У теста не указана рекламная кампания', 'error')
+        return redirect(url_for('ab_test_detail', test_id=test_id))
+    from modules import wb_api
+    stats = wb_api.get_campaign_stats(s.wb_stats_api_key, test.campaign_id)
+    if stats:
+        flash(f"WB: {stats['views']} показов · {stats['clicks']} кликов · CTR {stats['ctr']}%", 'success')
+    else:
+        flash('Не удалось получить данные из WB. Проверьте API ключ.', 'error')
+    return redirect(url_for('ab_test_detail', test_id=test_id))
+
+
+@app.route('/ab-tests/<int:test_id>/apply-photo/<int:variant_id>', methods=['POST'])
+def apply_variant_photo(test_id, variant_id):
+    test = ABTest.query.get_or_404(test_id)
+    variant = ABVariant.query.get_or_404(variant_id)
+    s = Settings.query.first()
+    if not s or not s.wb_content_api_key:
+        flash('Настройте API ключ WB Content в настройках', 'error')
+        return redirect(url_for('ab_test_detail', test_id=test_id))
+    if not variant.image_filename:
+        flash('У варианта нет загруженного изображения', 'error')
+        return redirect(url_for('ab_test_detail', test_id=test_id))
+    from modules import wb_api
+    photo_path = os.path.join(BASE_DIR, 'static', 'uploads', variant.image_filename)
+    success, msg = wb_api.set_product_photo(
+        s.wb_content_api_key, test.product.wb_article, photo_path
+    )
+    if success:
+        flash(f'Обложка «{variant.name}» применена на WB как главное фото', 'success')
+    else:
+        flash(f'Ошибка: {msg}', 'error')
+    return redirect(url_for('ab_test_detail', test_id=test_id))
 
 
 DEPLOY_TOKEN = 'wb-d3pl0y-k3y-2026'

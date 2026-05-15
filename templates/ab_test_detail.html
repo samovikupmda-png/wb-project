@@ -49,10 +49,14 @@
 <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
     <div class="stat-card">
         <div class="stat-label">РК</div>
-        <div style="margin-top: 8px; font-size: 15px; font-weight: 700;">
+        <div style="margin-top: 6px; font-size: 13px; font-weight: 700;">
             {% if test.campaign_type == 'unified' %}Единая{% else %}Ручная{% endif %}
         </div>
+        {% if test.campaign_id %}
+        <div class="stat-sub">ID: {{ test.campaign_id }}</div>
+        {% else %}
         <div class="stat-sub">кампания</div>
+        {% endif %}
     </div>
     <div class="stat-card accent">
         <div class="stat-label">Цель CTR</div>
@@ -78,6 +82,23 @@
         </div>
     </div>
 </div>
+
+<!-- Синхронизация с WB -->
+{% if test.campaign_id %}
+<div class="card" style="margin-bottom: 20px; background: #f0fdf4; border-color: #a7f3d0;">
+    <div class="card-body" style="padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+            <span style="font-weight: 600; font-size: 13px;">📊 Синхронизация с WB</span>
+            <span class="text-secondary" style="font-size: 12px; margin-left: 10px;">
+                Кампания: {% if test.campaign_name %}{{ test.campaign_name }}{% else %}ID {{ test.campaign_id }}{% endif %}
+            </span>
+        </div>
+        <form action="{{ url_for('sync_test_stats', test_id=test.id) }}" method="POST" style="margin: 0;">
+            <button type="submit" class="btn btn-success btn-sm">↻ Получить статистику из WB</button>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <!-- Варианты -->
 <div class="card">
@@ -127,6 +148,14 @@
                     <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary);">
                         Нужно: {{ test.min_impressions - v.impressions }} показов
                     </div>
+                    {% endif %}
+                    {% if v.image_filename and test.status != 'completed' %}
+                    <form action="{{ url_for('apply_variant_photo', test_id=test.id, variant_id=v.id) }}" method="POST" style="margin-top: 10px;">
+                        <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%;"
+                                onclick="return confirm('Установить эту обложку как главное фото товара на WB?')">
+                            📤 Применить на WB
+                        </button>
+                    </form>
                     {% endif %}
                 </div>
             </div>

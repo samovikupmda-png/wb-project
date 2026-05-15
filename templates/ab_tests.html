@@ -104,12 +104,19 @@
                     <input type="text" name="name" class="form-control" placeholder="Например: Тест обложки май 2025" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Тип рекламной кампании</label>
+                    <label class="form-label">Рекламная кампания WB</label>
+                    <select name="campaign_id" id="campaignSelect" class="form-control" onchange="onCampaignChange(this)">
+                        <option value="">— загрузка кампаний... —</option>
+                    </select>
+                    <input type="hidden" name="campaign_name" id="campaignName">
+                    <div class="form-hint" id="campaignHint">Активные РК загружаются из WB API</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Тип кампании</label>
                     <select name="campaign_type" class="form-control">
                         <option value="manual">Ручная кампания</option>
                         <option value="unified">Единая кампания</option>
                     </select>
-                    <div class="form-hint">Через какую РК будете тестировать</div>
                 </div>
                 <div class="form-row-3">
                     <div class="form-group">
@@ -136,4 +143,39 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function onCampaignChange(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    document.getElementById('campaignName').value = opt.text || '';
+}
+
+fetch('/api/wb/campaigns')
+    .then(r => r.json())
+    .then(data => {
+        const sel = document.getElementById('campaignSelect');
+        if (!sel) return;
+        if (data.error) {
+            sel.innerHTML = '<option value="">— настройте API ключ WB —</option>';
+            document.getElementById('campaignHint').textContent = data.error;
+            return;
+        }
+        sel.innerHTML = '<option value="">— выберите кампанию —</option>';
+        (data || []).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.advertId;
+            opt.textContent = `${c.name} (ID: ${c.advertId})`;
+            sel.appendChild(opt);
+        });
+        if (data.length === 0) {
+            sel.innerHTML = '<option value="">— нет активных кампаний —</option>';
+        }
+    })
+    .catch(() => {
+        const sel = document.getElementById('campaignSelect');
+        if (sel) sel.innerHTML = '<option value="">— ошибка загрузки —</option>';
+    });
+</script>
 {% endblock %}

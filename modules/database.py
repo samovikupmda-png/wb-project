@@ -28,6 +28,8 @@ class ABTest(db.Model):
     name = db.Column(db.String(256), nullable=False)
     status = db.Column(db.String(32), default='paused')  # active, paused, completed
     campaign_type = db.Column(db.String(32), default='manual')  # manual, unified
+    campaign_id = db.Column(db.Integer, nullable=True)
+    campaign_name = db.Column(db.String(256), default='')
     target_ctr = db.Column(db.Float, default=3.0)
     min_impressions = db.Column(db.Integer, default=2000)
     rotation_interval = db.Column(db.Integer, default=30)  # minutes
