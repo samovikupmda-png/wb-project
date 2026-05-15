@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, f
 from modules.database import db, Settings, Product, ABTest, ABVariant
 from modules import ab_test as ab_module
 import os
+import subprocess
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -183,6 +184,29 @@ def save_settings():
     db.session.commit()
     flash('Настройки сохранены', 'success')
     return redirect(url_for('settings'))
+
+
+DEPLOY_TOKEN = 'wb-d3pl0y-k3y-2026'
+
+@app.route('/deploy')
+def deploy():
+    if request.args.get('token') != DEPLOY_TOKEN:
+        return 'Unauthorized', 401
+    try:
+        env = os.environ.copy()
+        env['HOME'] = '/var/www'
+        out = subprocess.run(
+            ['git', '-C', '/var/www/wb-project', 'pull', 'origin',
+             'claude/project-management-analysis-jKH5e'],
+            capture_output=True, text=True, timeout=60, env=env
+        )
+        fix = subprocess.run(
+            ['chown', '-R', 'www-data:www-data', '/var/www/wb-project'],
+            capture_output=True, text=True
+        )
+        return f'<pre>OK\n{out.stdout}{out.stderr}</pre>', 200
+    except Exception as e:
+        return f'<pre>Error: {e}</pre>', 500
 
 
 if __name__ == '__main__':
