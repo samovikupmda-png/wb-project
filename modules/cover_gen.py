@@ -4,8 +4,10 @@ from io import BytesIO
 from PIL import Image as PILImage
 from openai import OpenAI
 
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-def _wb_image_url(nm):
+
+def _wb_image_url(nm, photo_number=1):
     nm = int(nm)
     vol = nm // 100000
     part = nm // 1000
@@ -21,7 +23,29 @@ def _wb_image_url(nm):
         if vol <= threshold:
             basket = b
             break
-    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/1.jpg'
+    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
+
+
+def fetch_product_photos(article, max_photos=5):
+    """Fetch all available product photos from WB CDN by article number."""
+    photos = []
+    for i in range(1, max_photos + 1):
+        url = _wb_image_url(article, photo_number=i)
+        try:
+            r = requests.get(url, timeout=8, headers=HEADERS)
+            if r.status_code == 200 and len(r.content) > 5000:
+                photos.append({'number': i, 'url': url, 'bytes': r.content})
+            else:
+                break  # WB returns 404 or tiny image when no more photos
+        except Exception:
+            break
+    return photos
+
+
+def fetch_wb_cover_by_article(article):
+    """Fetch the current cover (photo #1) of a WB product."""
+    photos = fetch_product_photos(article, max_photos=1)
+    return photos[0]['bytes'] if photos else None
 
 
 def search_wb_covers(keyword, limit=8):
@@ -33,7 +57,7 @@ def search_wb_covers(keyword, limit=8):
                 'query': keyword, 'resultset': 'catalog',
                 'sort': 'popular', 'spp': 30,
             },
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+            headers=HEADERS,
             timeout=12
         )
         if r.status_code != 200:
@@ -53,24 +77,12 @@ def search_wb_covers(keyword, limit=8):
         return []
 
 
-def fetch_wb_cover_by_article(article):
-    """Fetch the current cover of a WB product by its article number."""
-    try:
-        url = _wb_image_url(int(article))
-        r = requests.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
-        if r.status_code == 200:
-            return r.content
-        return None
-    except Exception:
-        return None
-
-
 def _load_competitor_images(covers):
     image_content = []
     valid_covers = []
     for c in covers:
         try:
-            resp = requests.get(c['url'], timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+            resp = requests.get(c['url'], timeout=8, headers=HEADERS)
             if resp.status_code == 200:
                 b64 = base64.b64encode(resp.content).decode()
                 image_content.append({
@@ -91,14 +103,6 @@ def _to_png_bytes(image_bytes):
     return out
 
 
-def _bytes_to_b64_content(image_bytes, detail='high'):
-    b64 = base64.b64encode(image_bytes).decode()
-    return {
-        'type': 'image_url',
-        'image_url': {'url': f'data:image/jpeg;base64,{b64}', 'detail': detail}
-    }
-
-
 def extract_cover_info(current_cover_bytes, openai_key):
     """Use GPT-4o to extract all text and product info from the current cover."""
     client = OpenAI(api_key=openai_key)
@@ -112,10 +116,10 @@ def extract_cover_info(current_cover_bytes, openai_key):
                     'type': 'text',
                     'text': """Внимательно прочитай эту обложку товара и выпиши ВЕСЬ текст и информацию с неё.
 
-Включи:
+Включи абсолютно всё:
 - Название товара и бренд
 - Количество (капсул, штук, граммов, мл и т.д.)
-- Дозировку или состав если указан
+- Дозировку и состав если указаны
 - Все маркетинговые claims (например: "-7 кг за 14 дней", "100% натуральный", "без ГМО")
 - Сертификаты или знаки качества
 - Любые цифры, даты, проценты
@@ -126,7 +130,7 @@ def extract_cover_info(current_cover_bytes, openai_key):
 [Весь найденный текст и данные, по пунктам]
 
 КЛЮЧЕВЫЕ CLAIMS ДЛЯ НОВОЙ ОБЛОЖКИ:
-[Самые важные маркетинговые утверждения, которые обязательно должны быть на новой обложке]"""
+[Самые важные маркетинговые утверждения, которые ОБЯЗАТЕЛЬНО должны быть на новой обложке]"""
                 },
                 {
                     'type': 'image_url',
@@ -140,23 +144,48 @@ def extract_cover_info(current_cover_bytes, openai_key):
 
 
 def analyze_and_generate(keyword, product_name, openai_key,
-                         product_image_bytes=None,
-                         current_cover_bytes=None,
+                         article=None,
+                         product_photo_number=1,
                          extra_hint='',
                          n_competitors=6):
+    """
+    Full pipeline:
+    1. Auto-fetch current cover + product photo from WB by article
+    2. Extract all text/info from current cover via GPT-4o
+    3. Parse competitor covers from WB search
+    4. Analyze competitors + build prompt with correct product info
+    5. Generate new cover with gpt-image-1 using real product photo
+    """
     client = OpenAI(api_key=openai_key)
 
-    # Step 1: Extract info from current cover
+    # Step 1: Fetch current cover and product photo from WB
+    current_cover_bytes = None
+    product_image_bytes = None
+    fetched_photos = []
+
+    if article:
+        fetched_photos = fetch_product_photos(article, max_photos=6)
+        if fetched_photos:
+            current_cover_bytes = fetched_photos[0]['bytes']  # cover = photo #1
+            # Use selected photo number as product image (default: cover)
+            selected = next((p for p in fetched_photos if p['number'] == product_photo_number),
+                            fetched_photos[0])
+            product_image_bytes = selected['bytes']
+
+    # Step 2: Extract info from current cover
     cover_info = ''
     if current_cover_bytes:
         cover_info = extract_cover_info(current_cover_bytes, openai_key)
 
-    # Step 2: Fetch and load competitor covers
+    # Step 3: Fetch competitor covers
     covers = search_wb_covers(keyword, limit=n_competitors)
     competitor_images, valid_covers = _load_competitor_images(covers)
 
-    # Step 3: Analyze competitors + build generation prompt
-    cover_info_block = f'\n\nИНФОРМАЦИЯ С ТЕКУЩЕЙ ОБЛОЖКИ ТОВАРА:\n{cover_info}\nЭту информацию (количество, claims, состав) ОБЯЗАТЕЛЬНО включи в промпт для генерации.' if cover_info else ''
+    # Step 4: Build analysis prompt
+    cover_info_block = (
+        f'\n\nИНФОРМАЦИЯ С ТЕКУЩЕЙ ОБЛОЖКИ (взята с WB автоматически):\n{cover_info}\n'
+        f'Эту информацию (количество, claims, состав) ОБЯЗАТЕЛЬНО включи в промпт для генерации.'
+    ) if cover_info else ''
     hint_line = f'\nДополнительно: {extra_hint}' if extra_hint else ''
 
     analysis_prompt = f"""Ты эксперт по визуальному маркетингу на маркетплейсах.
@@ -195,11 +224,12 @@ def analyze_and_generate(keyword, product_name, openai_key,
             f'white or gradient background, studio lighting, photorealistic.'
         )
 
-    # Step 4: Generate
+    # Step 5: Generate with real product photo
     if product_image_bytes:
         full_prompt = (
             f'Create a professional Wildberries marketplace cover image. '
-            f'Keep the product from the reference image exactly as-is — same packaging, label, shape, colors. '
+            f'Keep the product from the reference image exactly as-is — '
+            f'same packaging, label, shape, colors, all text on the product. '
             f'Apply this cover design around it: {dalle_prompt[:2500]}'
         )
         png_file = _to_png_bytes(product_image_bytes)
@@ -227,6 +257,7 @@ def analyze_and_generate(keyword, product_name, openai_key,
         'analysis': analysis_text,
         'dalle_prompt': dalle_prompt,
         'generated_url': generated_url,
+        'fetched_photos': [{'number': p['number'], 'url': p['url']} for p in fetched_photos],
         'used_product_photo': bool(product_image_bytes),
         'used_current_cover': bool(current_cover_bytes),
     }

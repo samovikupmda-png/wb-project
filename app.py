@@ -175,7 +175,15 @@ def delete_test(test_id):
 
 @app.route('/cover-generator')
 def cover_generator():
-    return render_template('cover_generator.html')
+    products = Product.query.order_by(Product.name).all()
+    return render_template('cover_generator.html', products=products)
+
+
+@app.route('/api/wb/product-photos/<article>')
+def api_product_photos(article):
+    from modules import cover_gen
+    photos = cover_gen.fetch_product_photos(article, max_photos=6)
+    return jsonify({'photos': [{'number': p['number'], 'url': p['url']} for p in photos]})
 
 
 @app.route('/api/covers/generate', methods=['POST'])
@@ -183,38 +191,35 @@ def api_covers_generate():
     s = Settings.query.first()
     if not s or not s.image_ai_api_key:
         return jsonify({'error': 'API-ключ OpenAI не настроен. Добавьте его в Настройки → Генерация изображений.'}), 400
-    keyword = (request.form.get('keyword') or '').strip()
-    product_name = (request.form.get('product_name') or '').strip()
-    extra_hint = (request.form.get('extra_hint') or '').strip()
-    custom_prompt = (request.form.get('custom_prompt') or '').strip()
-    if not keyword or not product_name:
-        return jsonify({'error': 'Укажите ключевой запрос и название товара'}), 400
 
-    product_image_bytes = None
-    photo_file = request.files.get('product_photo')
-    if photo_file and photo_file.filename:
-        product_image_bytes = photo_file.read()
+    data = request.get_json()
+    product_id = data.get('product_id')
+    keyword = (data.get('keyword') or '').strip()
+    extra_hint = (data.get('extra_hint') or '').strip()
+    custom_prompt = (data.get('custom_prompt') or '').strip()
+    photo_number = int(data.get('photo_number') or 1)
 
-    current_cover_bytes = None
-    cover_file = request.files.get('current_cover')
-    if cover_file and cover_file.filename:
-        current_cover_bytes = cover_file.read()
+    if not keyword or not product_id:
+        return jsonify({'error': 'Укажите товар и ключевой запрос'}), 400
 
+    product = Product.query.get_or_404(product_id)
     from modules import cover_gen
+
     try:
         if custom_prompt:
             from openai import OpenAI
             client = OpenAI(api_key=s.image_ai_api_key)
-            if product_image_bytes:
-                png = cover_gen._to_png_bytes(product_image_bytes)
+            photos = cover_gen.fetch_product_photos(product.wb_article, max_photos=photo_number)
+            selected = next((p for p in photos if p['number'] == photo_number), photos[0] if photos else None)
+            if selected:
+                png = cover_gen._to_png_bytes(selected['bytes'])
                 img_resp = client.images.edit(
                     model='gpt-image-1',
                     image=('product.png', png, 'image/png'),
                     prompt=custom_prompt[:4000],
                     size='1024x1024',
                 )
-                b64 = img_resp.data[0].b64_json
-                generated_url = f'data:image/png;base64,{b64}'
+                generated_url = f'data:image/png;base64,{img_resp.data[0].b64_json}'
             else:
                 img_resp = client.images.generate(
                     model='dall-e-3', prompt=custom_prompt[:4000],
@@ -225,14 +230,14 @@ def api_covers_generate():
                 'covers': [], 'analysis': '', 'cover_info': '',
                 'dalle_prompt': custom_prompt,
                 'generated_url': generated_url,
-                'used_product_photo': bool(product_image_bytes),
+                'used_product_photo': bool(selected),
                 'used_current_cover': False,
             })
 
         result = cover_gen.analyze_and_generate(
-            keyword, product_name, s.image_ai_api_key,
-            product_image_bytes=product_image_bytes,
-            current_cover_bytes=current_cover_bytes,
+            keyword, product.name, s.image_ai_api_key,
+            article=product.wb_article,
+            product_photo_number=photo_number,
             extra_hint=extra_hint,
         )
         return jsonify(result)

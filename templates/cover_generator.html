@@ -4,55 +4,46 @@
 {% block content %}
 <div class="page-header">
     <h1>Генерация обложек</h1>
-    <p>Анализирует вашу обложку + конкурентов → создаёт новую с правильной информацией и реальным товаром</p>
+    <p>Выбери товар → ИИ сам тянет обложку и фото с WB → анализирует конкурентов → генерирует</p>
 </div>
 
+{% if not products %}
 <div class="card">
-    <div class="card-header">
-        <span class="card-title">Параметры генерации</span>
+    <div class="card-body" style="text-align:center;padding:40px;">
+        <div style="font-size:48px;margin-bottom:16px;">📦</div>
+        <p style="color:#9ca3af;">Сначала добавь товары в <a href="{{ url_for('products') }}" style="color:#8b5cf6;">разделе «Мои товары»</a></p>
     </div>
+</div>
+{% else %}
+
+<div class="card">
+    <div class="card-header"><span class="card-title">Параметры генерации</span></div>
     <div class="card-body">
-        <form id="gen-form" enctype="multipart/form-data">
+        <form id="gen-form">
 
-            <!-- Два загрузчика изображений -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+            <!-- Выбор товара -->
+            <div class="form-group">
+                <label class="form-label">Ваш товар</label>
+                <select id="product_select" class="form-control" required>
+                    <option value="">— Выберите товар —</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}" data-article="{{ p.wb_article }}" data-name="{{ p.name }}">
+                        {{ p.name }} (арт. {{ p.wb_article }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-                <!-- Текущая обложка -->
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">
-                        Текущая обложка товара
-                        <span style="color:#8b5cf6;font-weight:600;"> — обязательно</span>
-                    </label>
-                    <div class="img-drop" id="cover-drop" data-target="current_cover">
-                        <input type="file" id="current_cover" name="current_cover"
-                               accept="image/*" class="drop-input">
-                        <div class="drop-placeholder" id="cover-placeholder">
-                            <div style="font-size:28px;margin-bottom:6px;">🖼</div>
-                            <div style="color:#9ca3af;font-size:13px;">Текущая обложка</div>
-                            <div style="color:#6b7280;font-size:11px;margin-top:3px;">ИИ прочитает весь текст с неё</div>
-                        </div>
-                        <img id="cover-preview" src="" alt="" class="drop-preview">
-                    </div>
-                    <div class="form-hint">Количество капсул, claims, состав — всё будет перенесено в новую обложку</div>
+            <!-- Превью фото с WB -->
+            <div id="photos-block" style="display:none;margin-bottom:20px;">
+                <label class="form-label">Фото товара на WB — выберите, какое использовать для генерации</label>
+                <div id="photos-loading" style="color:#9ca3af;font-size:13px;padding:8px 0;">
+                    Загружаем фото с WB...
                 </div>
-
-                <!-- Фото товара -->
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">
-                        Фото вашего товара (упаковка)
-                        <span style="color:#8b5cf6;font-weight:600;"> — обязательно</span>
-                    </label>
-                    <div class="img-drop" id="photo-drop" data-target="product_photo">
-                        <input type="file" id="product_photo" name="product_photo"
-                               accept="image/*" class="drop-input">
-                        <div class="drop-placeholder" id="photo-placeholder">
-                            <div style="font-size:28px;margin-bottom:6px;">📷</div>
-                            <div style="color:#9ca3af;font-size:13px;">Фото упаковки</div>
-                            <div style="color:#6b7280;font-size:11px;margin-top:3px;">Будет вставлено в готовую обложку</div>
-                        </div>
-                        <img id="photo-preview" src="" alt="" class="drop-preview">
-                    </div>
-                    <div class="form-hint">Любое качественное фото продукта — студийное, на белом фоне, из карточки</div>
+                <div id="photos-grid"
+                     style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"></div>
+                <div class="form-hint">
+                    Выбранное фото — основа для генерации. ИИ сохранит упаковку, этикетку и форму товара точно.
                 </div>
             </div>
 
@@ -61,24 +52,21 @@
                     <label class="form-label">Ключевой запрос для анализа конкурентов</label>
                     <input type="text" id="keyword" class="form-control"
                            placeholder="Например: капсулы для похудения" required>
-                    <div class="form-hint">Найдём топ-обложки по этому запросу на WB</div>
+                    <div class="form-hint">Найдём топ-обложки конкурентов по этому запросу на WB</div>
                 </div>
                 <div class="form-group" style="margin:0">
-                    <label class="form-label">Название вашего товара</label>
-                    <input type="text" id="product_name" class="form-control"
-                           placeholder="Например: SLIMSHOT капсулы для похудения" required>
+                    <label class="form-label">Дополнительные пожелания</label>
+                    <input type="text" id="extra_hint" class="form-control"
+                           placeholder="Например: зелёные цвета, акцент на -7 кг за 14 дней">
                 </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Дополнительные пожелания (необязательно)</label>
-                <input type="text" id="extra_hint" class="form-control"
-                       placeholder="Например: акцент на зелёный цвет, добавить эффект до/после">
-            </div>
-
-            <button type="submit" class="btn btn-primary" id="gen-btn">
+            <button type="submit" class="btn btn-primary" id="gen-btn" disabled>
                 ✦ Анализировать и сгенерировать
             </button>
+            <span id="no-product-hint" style="margin-left:12px;font-size:13px;color:#6b7280;">
+                Выберите товар для начала
+            </span>
         </form>
     </div>
 </div>
@@ -86,16 +74,17 @@
 <!-- Loader -->
 <div id="loader" style="display:none;text-align:center;padding:48px 0;">
     <div class="loader-spinner"></div>
-    <p id="loader-text" style="margin-top:16px;color:#9ca3af;font-size:14px;">Читаем вашу обложку...</p>
+    <p id="loader-text" style="margin-top:16px;color:#9ca3af;font-size:14px;">
+        Читаем текущую обложку с WB...
+    </p>
 </div>
 
 <!-- Results -->
 <div id="results" style="display:none;">
 
-    <!-- Извлечённая информация с текущей обложки -->
     <div id="cover-info-card" class="card" style="display:none;">
         <div class="card-header">
-            <span class="card-title">Информация считана с вашей обложки</span>
+            <span class="card-title">Информация считана с текущей обложки WB</span>
         </div>
         <div class="card-body">
             <div id="cover-info-text"
@@ -104,9 +93,7 @@
     </div>
 
     <div class="card">
-        <div class="card-header">
-            <span class="card-title">Обложки конкурентов (топ WB)</span>
-        </div>
+        <div class="card-header"><span class="card-title">Обложки конкурентов (топ WB)</span></div>
         <div class="card-body">
             <div id="competitors-grid"
                  style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
@@ -115,9 +102,7 @@
     </div>
 
     <div class="card">
-        <div class="card-header">
-            <span class="card-title">Анализ конкурентов</span>
-        </div>
+        <div class="card-header"><span class="card-title">Анализ конкурентов</span></div>
         <div class="card-body">
             <div id="analysis-text"
                  style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:#e5e7eb;"></div>
@@ -135,16 +120,15 @@
         <div class="card-body" style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
             <div>
                 <img id="generated-img" src="" alt="Generated cover"
-                     style="width:320px;height:320px;object-fit:cover;
-                            border-radius:12px;border:1px solid #374151;">
+                     style="width:320px;height:320px;object-fit:cover;border-radius:12px;border:1px solid #374151;">
                 <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
                     <div id="badge-photo" style="display:none;background:#7c3aed20;border:1px solid #7c3aed;
                          border-radius:6px;padding:5px 10px;font-size:12px;color:#a78bfa;text-align:center;">
-                        ✓ Использовано ваше фото товара
+                        ✓ Использовано фото с WB
                     </div>
                     <div id="badge-cover" style="display:none;background:#065f4620;border:1px solid #059669;
                          border-radius:6px;padding:5px 10px;font-size:12px;color:#34d399;text-align:center;">
-                        ✓ Информация перенесена с текущей обложки
+                        ✓ Информация перенесена с текущей обложки WB
                     </div>
                 </div>
             </div>
@@ -157,10 +141,11 @@
             </div>
         </div>
     </div>
-
 </div>
 
 <div id="error-block" style="display:none;" class="flash flash-error"></div>
+
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -171,89 +156,107 @@
     animation:spin 0.8s linear infinite;margin:0 auto;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
-
-.img-drop {
-    border:2px dashed #374151;border-radius:12px;
-    padding:24px;text-align:center;cursor:pointer;
-    transition:border-color 0.2s;position:relative;
-    min-height:140px;display:flex;align-items:center;justify-content:center;
+.competitor-thumb{border-radius:8px;overflow:hidden;background:#1f2937;border:1px solid #374151;}
+.competitor-thumb img{width:100%;aspect-ratio:1;object-fit:cover;display:block;}
+.competitor-thumb .thumb-name{font-size:11px;color:#9ca3af;padding:6px 8px;
+    line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wb-photo-thumb {
+    width:100px;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;
+    border:3px solid transparent;transition:border-color 0.15s,transform 0.15s;
 }
-.img-drop:hover,.img-drop.drag-over { border-color:#8b5cf6; }
-.drop-input {
-    position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
-}
-.drop-preview {
-    display:none;max-height:180px;max-width:100%;
-    border-radius:8px;object-fit:contain;
-}
-.competitor-thumb { border-radius:8px;overflow:hidden;background:#1f2937;border:1px solid #374151; }
-.competitor-thumb img { width:100%;aspect-ratio:1;object-fit:cover;display:block; }
-.competitor-thumb .thumb-name {
-    font-size:11px;color:#9ca3af;padding:6px 8px;
-    line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.btn-sm { padding:6px 14px;font-size:13px; }
+.wb-photo-thumb:hover{transform:scale(1.04);}
+.wb-photo-thumb.selected{border-color:#8b5cf6;}
+.btn-sm{padding:6px 14px;font-size:13px;}
 </style>
 <script>
+let selectedPhotoNumber = 1;
+let selectedProductId = null;
+let selectedArticle = null;
 let lastPrompt = '';
-let productPhotoFile = null;
-let currentCoverFile = null;
 
-function setupDrop(dropId, inputId, previewId, placeholderId, fileVar) {
-    const drop = document.getElementById(dropId);
-    const input = document.getElementById(inputId);
-    const preview = document.getElementById(previewId);
-    const placeholder = document.getElementById(placeholderId);
+const productSelect = document.getElementById('product_select');
+const genBtn = document.getElementById('gen-btn');
+const noHint = document.getElementById('no-product-hint');
 
-    function showPreview(file) {
-        if (fileVar === 'photo') productPhotoFile = file;
-        else currentCoverFile = file;
-        const reader = new FileReader();
-        reader.onload = e => {
-            preview.src = e.target.result;
-            preview.style.display = 'block';
-            placeholder.style.display = 'none';
-        };
-        reader.readAsDataURL(file);
+productSelect && productSelect.addEventListener('change', function() {
+    const opt = this.options[this.selectedIndex];
+    selectedProductId = opt.value;
+    selectedArticle = opt.dataset.article;
+
+    if (!selectedProductId) {
+        genBtn.disabled = true;
+        noHint.style.display = '';
+        document.getElementById('photos-block').style.display = 'none';
+        return;
     }
 
-    input.addEventListener('change', () => { if (input.files[0]) showPreview(input.files[0]); });
-    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
-    drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
-    drop.addEventListener('drop', e => {
-        e.preventDefault(); drop.classList.remove('drag-over');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) showPreview(file);
-    });
+    genBtn.disabled = false;
+    noHint.style.display = 'none';
+    loadProductPhotos(selectedArticle);
+});
+
+async function loadProductPhotos(article) {
+    const block = document.getElementById('photos-block');
+    const loading = document.getElementById('photos-loading');
+    const grid = document.getElementById('photos-grid');
+    block.style.display = 'block';
+    loading.style.display = 'block';
+    grid.innerHTML = '';
+    selectedPhotoNumber = 1;
+
+    try {
+        const resp = await fetch(`/api/wb/product-photos/${article}`);
+        const data = await resp.json();
+        loading.style.display = 'none';
+
+        if (!data.photos || data.photos.length === 0) {
+            loading.textContent = 'Фото не найдены. Проверьте артикул.';
+            loading.style.display = 'block';
+            return;
+        }
+
+        data.photos.forEach((p, idx) => {
+            const img = document.createElement('img');
+            img.src = p.url;
+            img.className = 'wb-photo-thumb' + (idx === 0 ? ' selected' : '');
+            img.title = `Фото ${p.number}`;
+            img.dataset.number = p.number;
+            img.addEventListener('click', () => {
+                document.querySelectorAll('.wb-photo-thumb').forEach(i => i.classList.remove('selected'));
+                img.classList.add('selected');
+                selectedPhotoNumber = p.number;
+            });
+            grid.appendChild(img);
+        });
+    } catch(e) {
+        loading.textContent = 'Не удалось загрузить фото.';
+    }
 }
 
-setupDrop('cover-drop','current_cover','cover-preview','cover-placeholder','cover');
-setupDrop('photo-drop','product_photo','photo-preview','photo-placeholder','photo');
-
-document.getElementById('gen-form').addEventListener('submit', async e => {
+document.getElementById('gen-form') && document.getElementById('gen-form').addEventListener('submit', async e => {
     e.preventDefault();
     await runGeneration(null);
 });
-document.getElementById('regen-btn').addEventListener('click', async () => {
+
+document.getElementById('regen-btn') && document.getElementById('regen-btn').addEventListener('click', async () => {
     await runGeneration(lastPrompt);
 });
 
 async function runGeneration(customPrompt) {
     const keyword = document.getElementById('keyword').value.trim();
-    const productName = document.getElementById('product_name').value.trim();
     const extraHint = document.getElementById('extra_hint').value.trim();
-    if (!keyword || !productName) return;
+    if (!keyword || !selectedProductId) return;
 
     document.getElementById('loader').style.display = 'block';
     document.getElementById('results').style.display = 'none';
     document.getElementById('error-block').style.display = 'none';
-    document.getElementById('gen-btn').disabled = true;
+    genBtn.disabled = true;
 
     const steps = [
-        'Читаем информацию с вашей обложки...',
-        'Ищем топ конкурентов на WB...',
+        'Читаем текущую обложку с WB...',
+        'Ищем топ конкурентов по запросу...',
         'GPT-4o анализирует обложки...',
-        'Генерируем обложку с вашим товаром...',
+        'Генерируем новую обложку с вашим товаром...',
     ];
     let stepIdx = 0;
     const loaderText = document.getElementById('loader-text');
@@ -263,15 +266,17 @@ async function runGeneration(customPrompt) {
     }, 8000);
 
     try {
-        const fd = new FormData();
-        fd.append('keyword', keyword);
-        fd.append('product_name', productName);
-        fd.append('extra_hint', extraHint);
-        if (customPrompt) fd.append('custom_prompt', customPrompt);
-        if (productPhotoFile) fd.append('product_photo', productPhotoFile);
-        if (currentCoverFile) fd.append('current_cover', currentCoverFile);
-
-        const resp = await fetch('/api/covers/generate', { method: 'POST', body: fd });
+        const resp = await fetch('/api/covers/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                product_id: selectedProductId,
+                photo_number: selectedPhotoNumber,
+                keyword,
+                extra_hint: extraHint,
+                custom_prompt: customPrompt || '',
+            })
+        });
         clearInterval(timer);
         const data = await resp.json();
         if (!resp.ok || data.error) { showError(data.error || 'Ошибка генерации'); return; }
@@ -281,18 +286,16 @@ async function runGeneration(customPrompt) {
         showError('Ошибка соединения: ' + err.message);
     } finally {
         document.getElementById('loader').style.display = 'none';
-        document.getElementById('gen-btn').disabled = false;
+        genBtn.disabled = false;
     }
 }
 
 function renderResults(data) {
-    // Cover info block
     if (data.cover_info) {
         document.getElementById('cover-info-text').textContent = data.cover_info;
         document.getElementById('cover-info-card').style.display = 'block';
     }
 
-    // Competitors
     const grid = document.getElementById('competitors-grid');
     grid.innerHTML = '';
     (data.covers || []).forEach(c => {
@@ -324,7 +327,6 @@ function renderResults(data) {
 
     lastPrompt = data.dalle_prompt || '';
     document.getElementById('dalle-prompt').textContent = lastPrompt;
-
     document.getElementById('badge-photo').style.display = data.used_product_photo ? 'block' : 'none';
     document.getElementById('badge-cover').style.display = data.used_current_cover ? 'block' : 'none';
 
