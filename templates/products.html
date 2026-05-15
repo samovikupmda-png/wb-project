@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Мои товары — WB Tools{% endblock %}
+
+{% block content %}
+<div class="flex-between page-header">
+    <div>
+        <h1>Мои товары</h1>
+        <p>Товары, добавленные в систему для работы</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('addProductModal')">+ Добавить товар</button>
+</div>
+
+{% if products %}
+<div class="card">
+    <div class="card-body" style="padding: 0;">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Артикул WB</th>
+                        <th>Название</th>
+                        <th>Категория</th>
+                        <th>AB-тестов</th>
+                        <th>Добавлен</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in products %}
+                    <tr>
+                        <td><span class="fw-600" style="color: var(--wb-purple);">{{ p.wb_article }}</span></td>
+                        <td>{{ p.name }}</td>
+                        <td class="text-secondary">{{ p.category or '—' }}</td>
+                        <td>{{ p.ab_tests | length }}</td>
+                        <td class="text-secondary">{{ p.created_at.strftime('%d.%m.%Y') }}</td>
+                        <td>
+                            <form action="{{ url_for('delete_product', product_id=p.id) }}" method="POST"
+                                  onsubmit="return confirm('Удалить товар «{{ p.name }}»?')">
+                                <button type="submit" class="btn btn-danger btn-sm">Удалить</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body">
+        <div class="empty-state">
+            <div class="empty-icon">◻</div>
+            <div class="empty-title">Товаров пока нет</div>
+            <div class="empty-text">Добавьте товары, чтобы начать работу с AB-тестированием и аналитикой</div>
+            <button class="btn btn-primary" onclick="openModal('addProductModal')">Добавить товар</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Модальное окно: добавить товар -->
+<div class="modal-overlay" id="addProductModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Добавить товар</span>
+            <button class="modal-close" onclick="closeModal('addProductModal')">✕</button>
+        </div>
+        <form action="{{ url_for('add_product') }}" method="POST">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Артикул WB *</label>
+                    <input type="text" name="wb_article" class="form-control" placeholder="Например: 123456789" required>
+                    <div class="form-hint">Найдите артикул в кабинете продавца WB</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Название товара *</label>
+                    <input type="text" name="name" class="form-control" placeholder="Сыворотка для лица с витамином С" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Категория</label>
+                    <select name="category" class="form-control">
+                        <option value="">— выберите —</option>
+                        <option value="Сыворотки">Сыворотки</option>
+                        <option value="Кремы для лица">Кремы для лица</option>
+                        <option value="БАДы для похудения">БАДы для похудения</option>
+                        <option value="Коллаген">Коллаген</option>
+                        <option value="Хлорофилл">Хлорофилл</option>
+                        <option value="Инозитол">Инозитол</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addProductModal')">Отмена</button>
+                <button type="submit" class="btn btn-primary">Добавить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

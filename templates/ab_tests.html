@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}AB-тестирование — WB Tools{% endblock %}
+
+{% block content %}
+<div class="flex-between page-header">
+    <div>
+        <h1>AB-тестирование обложек</h1>
+        <p>Сравнивайте варианты обложек и находите лучший CTR</p>
+    </div>
+    {% if products %}
+    <button class="btn btn-primary" onclick="openModal('createTestModal')">+ Новый тест</button>
+    {% endif %}
+</div>
+
+{% if not products %}
+<div class="card">
+    <div class="card-body">
+        <div class="empty-state">
+            <div class="empty-icon">◻</div>
+            <div class="empty-title">Сначала добавьте товары</div>
+            <div class="empty-text">Для создания теста нужен хотя бы один товар в системе</div>
+            <a href="{{ url_for('products') }}" class="btn btn-primary">Добавить товар</a>
+        </div>
+    </div>
+</div>
+{% elif not tests %}
+<div class="card">
+    <div class="card-body">
+        <div class="empty-state">
+            <div class="empty-icon">⟺</div>
+            <div class="empty-title">Тестов пока нет</div>
+            <div class="empty-text">Создайте первый тест — загрузите варианты обложек и система покажет, какая даёт лучший CTR</div>
+            <button class="btn btn-primary" onclick="openModal('createTestModal')">Создать первый тест</button>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body" style="padding: 0;">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Статус</th>
+                        <th>Товар</th>
+                        <th>Цель CTR</th>
+                        <th>Вариантов</th>
+                        <th>Создан</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for test in tests %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('ab_test_detail', test_id=test.id) }}" style="color: var(--wb-purple); font-weight: 600;">
+                                {{ test.name }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge badge-{{ test.status }}">
+                                {% if test.status == 'active' %}● Активен
+                                {% elif test.status == 'paused' %}⏸ Пауза
+                                {% else %}✓ Завершён{% endif %}
+                            </span>
+                        </td>
+                        <td class="text-secondary">{{ test.product.name }}</td>
+                        <td><span class="fw-600">{{ test.target_ctr }}%</span></td>
+                        <td>{{ test.variants | length }}</td>
+                        <td class="text-secondary">{{ test.created_at.strftime('%d.%m.%Y') }}</td>
+                        <td>
+                            <a href="{{ url_for('ab_test_detail', test_id=test.id) }}" class="btn btn-secondary btn-sm">Открыть</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Модальное окно: создать тест -->
+<div class="modal-overlay" id="createTestModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Новый AB-тест</span>
+            <button class="modal-close" onclick="closeModal('createTestModal')">✕</button>
+        </div>
+        <form action="{{ url_for('create_ab_test') }}" method="POST">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Товар *</label>
+                    <select name="product_id" class="form-control" required>
+                        <option value="">— выберите товар —</option>
+                        {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.name }} ({{ p.wb_article }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Название теста *</label>
+                    <input type="text" name="name" class="form-control" placeholder="Например: Тест обложки май 2025" required>
+                </div>
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label class="form-label">Цель CTR (%)</label>
+                        <input type="number" name="target_ctr" class="form-control" value="3.0" step="0.1" min="0.1">
+                        <div class="form-hint">Целевой процент кликов</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Мин. показов</label>
+                        <input type="number" name="min_impressions" class="form-control" value="2000" step="100" min="100">
+                        <div class="form-hint">На каждый вариант</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ротация (мин)</label>
+                        <input type="number" name="rotation_interval" class="form-control" value="30" step="5" min="5">
+                        <div class="form-hint">Смена обложки</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('createTestModal')">Отмена</button>
+                <button type="submit" class="btn btn-primary">Создать тест</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

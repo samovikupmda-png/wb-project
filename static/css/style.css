@@ -1,0 +1,358 @@
+/* ── Переменные ─────────────────────────────────────────────────────────── */
+:root {
+    --wb-purple: #CB11AB;
+    --wb-purple-light: #f0d6ec;
+    --wb-purple-dark: #a00d8a;
+    --bg: #f6f7fb;
+    --sidebar-bg: #1a1a2e;
+    --sidebar-text: #a8b0c8;
+    --sidebar-active: #CB11AB;
+    --white: #ffffff;
+    --text-primary: #1a1a2e;
+    --text-secondary: #6b7280;
+    --border: #e5e7eb;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --radius: 12px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+/* ── Сброс ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+a { text-decoration: none; color: inherit; }
+button, input, select, textarea { font-family: inherit; }
+
+/* ── Раскладка ──────────────────────────────────────────────────────────── */
+.layout { display: flex; min-height: 100vh; }
+
+/* ── Сайдбар ────────────────────────────────────────────────────────────── */
+.sidebar {
+    width: 220px;
+    min-height: 100vh;
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 24px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.logo-icon { font-size: 22px; color: var(--wb-purple); }
+.logo-text { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+
+.sidebar-nav { flex: 1; padding: 16px 0; overflow-y: auto; }
+
+.nav-section {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.3);
+    padding: 16px 20px 6px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    color: var(--sidebar-text);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 0;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.nav-item.active {
+    background: rgba(203, 17, 171, 0.15);
+    color: #fff;
+    border-left: 3px solid var(--wb-purple);
+}
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+.sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.version { font-size: 11px; color: rgba(255,255,255,0.2); }
+
+/* ── Основной контент ───────────────────────────────────────────────────── */
+.main-content { margin-left: 220px; flex: 1; min-height: 100vh; }
+.content-inner { padding: 32px; max-width: 1200px; }
+
+/* ── Уведомления ────────────────────────────────────────────────────────── */
+.flash-container { margin-bottom: 20px; }
+.flash {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+.flash-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.flash-error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.flash-info    { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+
+/* ── Заголовок страницы ─────────────────────────────────────────────────── */
+.page-header { margin-bottom: 28px; }
+.page-header h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); }
+.page-header p  { margin-top: 4px; color: var(--text-secondary); font-size: 14px; }
+
+/* ── Карточки статистики ────────────────────────────────────────────────── */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+.stat-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+}
+.stat-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-top: 6px; }
+.stat-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.stat-card.accent .stat-value { color: var(--wb-purple); }
+
+/* ── Панели / карточки ──────────────────────────────────────────────────── */
+.card {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+}
+.card-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.card-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.card-body  { padding: 20px; }
+
+/* ── Таблицы ────────────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    background: #fafafa;
+}
+td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-primary);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafafa; }
+
+/* ── Кнопки ─────────────────────────────────────────────────────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.btn-primary  { background: var(--wb-purple); color: #fff; }
+.btn-primary:hover { background: var(--wb-purple-dark); }
+.btn-secondary { background: #f3f4f6; color: var(--text-primary); border: 1px solid var(--border); }
+.btn-secondary:hover { background: #e5e7eb; }
+.btn-danger   { background: #fee2e2; color: var(--danger); border: 1px solid #fca5a5; }
+.btn-danger:hover { background: #fecaca; }
+.btn-success  { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+/* ── Формы ──────────────────────────────────────────────────────────────── */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.form-hint  { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.form-control {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--white);
+    transition: border-color 0.2s;
+    outline: none;
+}
+.form-control:focus { border-color: var(--wb-purple); box-shadow: 0 0 0 3px var(--wb-purple-light); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+/* ── Бейджи ─────────────────────────────────────────────────────────────── */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.badge-active    { background: #d1fae5; color: #065f46; }
+.badge-paused    { background: #fef3c7; color: #92400e; }
+.badge-completed { background: #dbeafe; color: #1e40af; }
+
+/* ── Прогресс CTR ───────────────────────────────────────────────────────── */
+.ctr-bar-wrap { display: flex; align-items: center; gap: 10px; }
+.ctr-bar-bg {
+    flex: 1;
+    height: 8px;
+    background: #f3f4f6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.ctr-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--wb-purple);
+    transition: width 0.4s ease;
+}
+.ctr-bar-fill.winner { background: var(--success); }
+.ctr-value { font-size: 13px; font-weight: 700; min-width: 42px; text-align: right; }
+
+/* ── Варианты AB ────────────────────────────────────────────────────────── */
+.variants-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.variant-card {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--white);
+    transition: border-color 0.2s;
+}
+.variant-card.is-winner { border-color: var(--success); }
+.variant-card.is-leader { border-color: var(--wb-purple); }
+.variant-img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 32px;
+}
+.variant-img img { width: 100%; height: 100%; object-fit: cover; }
+.variant-info { padding: 14px; }
+.variant-name { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.variant-stats { display: flex; gap: 12px; font-size: 12px; color: var(--text-secondary); }
+.variant-ctr  { font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 6px 0; }
+.winner-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 6px;
+}
+
+/* ── Модальное окно ─────────────────────────────────────────────────────── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    background: var(--white);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 520px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-secondary); padding: 4px; }
+.modal-body  { padding: 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ── Пустое состояние ───────────────────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-secondary);
+}
+.empty-icon  { font-size: 48px; margin-bottom: 12px; }
+.empty-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.empty-text  { font-size: 13px; margin-bottom: 20px; }
+
+/* ── Скоро ──────────────────────────────────────────────────────────────── */
+.coming-soon {
+    text-align: center;
+    padding: 80px 24px;
+}
+.coming-soon .icon { font-size: 56px; margin-bottom: 16px; }
+.coming-soon h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.coming-soon p  { color: var(--text-secondary); font-size: 14px; }
+
+/* ── Иконка статуса API ─────────────────────────────────────────────────── */
+.api-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.api-dot { width: 8px; height: 8px; border-radius: 50%; }
+.api-dot.connected    { background: var(--success); }
+.api-dot.disconnected { background: #d1d5db; }
+
+/* ── Утилиты ────────────────────────────────────────────────────────────── */
+.flex { display: flex; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.gap-8  { gap: 8px; }
+.gap-12 { gap: 12px; }
+.mt-16  { margin-top: 16px; }
+.mt-24  { margin-top: 24px; }
+.text-secondary { color: var(--text-secondary); }
+.text-success   { color: var(--success); }
+.text-danger    { color: var(--danger); }
+.fw-600 { font-weight: 600; }
+.fw-700 { font-weight: 700; }

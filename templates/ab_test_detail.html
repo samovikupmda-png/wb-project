@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}{{ test.name }} — WB Tools{% endblock %}
+
+{% block content %}
+<!-- Шапка -->
+<div class="flex-between page-header">
+    <div>
+        <div style="margin-bottom: 8px;">
+            <a href="{{ url_for('ab_tests') }}" class="text-secondary" style="font-size: 13px;">← Все тесты</a>
+        </div>
+        <h1>{{ test.name }}</h1>
+        <p>{{ test.product.name }} · Артикул: {{ test.product.wb_article }}</p>
+    </div>
+    <div class="flex gap-8">
+        <form action="{{ url_for('pause_test', test_id=test.id) }}" method="POST">
+            <button type="submit" class="btn btn-secondary">
+                {% if test.status == 'active' %}⏸ Пауза{% else %}▶ Возобновить{% endif %}
+            </button>
+        </form>
+        <form action="{{ url_for('delete_test', test_id=test.id) }}" method="POST"
+              onsubmit="return confirm('Удалить тест «{{ test.name }}»?')">
+            <button type="submit" class="btn btn-danger">Удалить</button>
+        </form>
+    </div>
+</div>
+
+<!-- Параметры теста -->
+<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="stat-card">
+        <div class="stat-label">Статус</div>
+        <div style="margin-top: 8px;">
+            <span class="badge badge-{{ test.status }}" style="font-size: 13px; padding: 6px 14px;">
+                {% if test.status == 'active' %}● Активен
+                {% elif test.status == 'paused' %}⏸ Пауза
+                {% else %}✓ Завершён{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="stat-card accent">
+        <div class="stat-label">Цель CTR</div>
+        <div class="stat-value">{{ test.target_ctr }}%</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Мин. показов</div>
+        <div class="stat-value">{{ test.min_impressions }}</div>
+        <div class="stat-sub">на вариант</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Ротация</div>
+        <div class="stat-value">{{ test.rotation_interval }}<span style="font-size: 16px; font-weight: 500;"> мин</span></div>
+    </div>
+</div>
+
+<!-- Варианты -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Варианты обложек</span>
+        {% if test.status != 'completed' %}
+        <button class="btn btn-primary btn-sm" onclick="openModal('addVariantModal')">+ Добавить вариант</button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if stats and stats.variants %}
+        <div class="variants-grid" id="variantsGrid">
+            {% set leader = stats.variants | sort(attribute='ctr', reverse=True) | first %}
+            {% for v in stats.variants %}
+            {% set is_leader = (v.id == leader.id and v.ctr > 0 and not v.is_winner) %}
+            <div class="variant-card {% if v.is_winner %}is-winner{% elif is_leader %}is-leader{% endif %}" id="variant-{{ v.id }}">
+                <div class="variant-img">
+                    {% if v.image_filename %}
+                    <img src="{{ url_for('static', filename='uploads/' + v.image_filename) }}" alt="{{ v.name }}">
+                    {% else %}
+                    🖼
+                    {% endif %}
+                </div>
+                <div class="variant-info">
+                    <div class="variant-name">{{ v.name }}</div>
+                    {% if v.is_winner %}
+                    <div class="winner-badge">🏆 Победитель</div>
+                    {% elif is_leader %}
+                    <div class="winner-badge" style="background: var(--wb-purple-light); color: var(--wb-purple-dark);">↑ Лидирует</div>
+                    {% endif %}
+                    <div class="variant-ctr" id="ctr-{{ v.id }}">{{ v.ctr }}%</div>
+                    <div class="ctr-bar-wrap">
+                        <div class="ctr-bar-bg">
+                            <div class="ctr-bar-fill {% if v.is_winner %}winner{% endif %}"
+                                 id="bar-{{ v.id }}"
+                                 style="width: {{ [v.ctr / test.target_ctr * 100, 100] | min }}%"></div>
+                        </div>
+                        <span class="text-secondary" style="font-size: 11px;">цель {{ test.target_ctr }}%</span>
+                    </div>
+                    <div class="variant-stats mt-16">
+                        <span id="imp-{{ v.id }}">👁 {{ v.impressions }} показов</span>
+                        <span id="clk-{{ v.id }}">↗ {{ v.clicks }} кликов</span>
+                    </div>
+                    {% if v.is_tested %}
+                    <div style="margin-top: 6px; font-size: 11px; color: var(--success);">✓ Протестирован</div>
+                    {% else %}
+                    <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary);">
+                        Нужно: {{ test.min_impressions - v.impressions }} показов
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Ручное обновление статистики -->
+        {% if test.status != 'completed' %}
+        <div class="card" style="margin-top: 8px; background: #fafafa;">
+            <div class="card-header">
+                <span class="card-title" style="font-size: 13px;">Обновить статистику вручную</span>
+                <span class="text-secondary" style="font-size: 12px;">Данные из кабинета WB</span>
+            </div>
+            <div class="card-body">
+                <div id="manualStatsForm">
+                    {% for v in stats.variants %}
+                    <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+                        <div class="fw-600" style="margin-bottom: 10px; font-size: 13px;">{{ v.name }}</div>
+                        <div class="form-row">
+                            <div class="form-group" style="margin: 0;">
+                                <label class="form-label">Показы</label>
+                                <input type="number" class="form-control" id="input-imp-{{ v.id }}" value="{{ v.impressions }}" min="0">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label class="form-label">Клики</label>
+                                <input type="number" class="form-control" id="input-clk-{{ v.id }}" value="{{ v.clicks }}" min="0">
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary btn-sm mt-16"
+                                onclick="updateStats({{ v.id }}, {{ test.id }})">
+                            Сохранить
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">🖼</div>
+            <div class="empty-title">Вариантов пока нет</div>
+            <div class="empty-text">Добавьте минимум 2 варианта обложки для начала теста</div>
+            <button class="btn btn-primary" onclick="openModal('addVariantModal')">Добавить вариант</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно: добавить вариант -->
+<div class="modal-overlay" id="addVariantModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Добавить вариант обложки</span>
+            <button class="modal-close" onclick="closeModal('addVariantModal')">✕</button>
+        </div>
+        <form action="{{ url_for('add_variant', test_id=test.id) }}" method="POST" enctype="multipart/form-data">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Название варианта *</label>
+                    <input type="text" name="variant_name" class="form-control"
+                           placeholder="Например: Вариант А — белый фон" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Изображение обложки</label>
+                    <input type="file" name="image_file" class="form-control"
+                           accept=".jpg,.jpeg,.png,.webp">
+                    <div class="form-hint">JPG, PNG или WebP. Рекомендуемый размер: 900×1200px</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addVariantModal')">Отмена</button>
+                <button type="submit" class="btn btn-primary">Добавить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateStats(variantId, testId) {
+    const impressions = parseInt(document.getElementById('input-imp-' + variantId).value) || 0;
+    const clicks = parseInt(document.getElementById('input-clk-' + variantId).value) || 0;
+
+    fetch('/ab-tests/' + testId + '/update-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variant_id: variantId, impressions, clicks })
+    })
+    .then(r => r.json())
+    .then(data => {
+        data.variants.forEach(v => {
+            const ctrEl  = document.getElementById('ctr-' + v.id);
+            const barEl  = document.getElementById('bar-' + v.id);
+            const impEl  = document.getElementById('imp-' + v.id);
+            const clkEl  = document.getElementById('clk-' + v.id);
+            if (ctrEl) ctrEl.textContent = v.ctr + '%';
+            if (barEl) barEl.style.width = Math.min(v.ctr / {{ test.target_ctr }} * 100, 100) + '%';
+            if (impEl) impEl.textContent = '👁 ' + v.impressions + ' показов';
+            if (clkEl) clkEl.textContent = '↗ ' + v.clicks + ' кликов';
+        });
+        if (data.status === 'completed') {
+            setTimeout(() => location.reload(), 800);
+        }
+    });
+}
+</script>
+{% endblock %}

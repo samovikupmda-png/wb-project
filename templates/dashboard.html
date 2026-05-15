@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — WB Tools{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Дашборд</h1>
+    <p>Общая сводка по всем инструментам</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Товаров</div>
+        <div class="stat-value">{{ products_count }}</div>
+        <div class="stat-sub">добавлено в систему</div>
+    </div>
+    <div class="stat-card accent">
+        <div class="stat-label">Активных тестов</div>
+        <div class="stat-value">{{ active_tests }}</div>
+        <div class="stat-sub">AB-тестирований</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Завершено тестов</div>
+        <div class="stat-value">{{ completed_tests }}</div>
+        <div class="stat-sub">победитель найден</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Средний CTR</div>
+        <div class="stat-value">—</div>
+        <div class="stat-sub">подключите API WB</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Последние тесты</span>
+        <a href="{{ url_for('ab_tests') }}" class="btn btn-secondary btn-sm">Все тесты</a>
+    </div>
+    <div class="card-body" style="padding: 0;">
+        {% if recent_tests %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Название теста</th>
+                        <th>Статус</th>
+                        <th>Цель CTR</th>
+                        <th>Вариантов</th>
+                        <th>Создан</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for test in recent_tests %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('ab_test_detail', test_id=test.id) }}" style="color: var(--wb-purple); font-weight: 600;">
+                                {{ test.name }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge badge-{{ test.status }}">
+                                {% if test.status == 'active' %}Активен
+                                {% elif test.status == 'paused' %}Пауза
+                                {% else %}Завершён{% endif %}
+                            </span>
+                        </td>
+                        <td>{{ test.target_ctr }}%</td>
+                        <td>{{ test.variants | length }}</td>
+                        <td class="text-secondary">{{ test.created_at.strftime('%d.%m.%Y') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">⟺</div>
+            <div class="empty-title">Тестов пока нет</div>
+            <div class="empty-text">Создайте первый AB-тест для своих обложек</div>
+            <a href="{{ url_for('ab_tests') }}" class="btn btn-primary">Создать тест</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}WB Инструменты{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="layout">
+
+        <!-- Боковая панель -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <span class="logo-icon">◈</span>
+                <span class="logo-text">WB Tools</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <span class="nav-icon">⊞</span>
+                    <span>Дашборд</span>
+                </a>
+                <a href="{{ url_for('products') }}" class="nav-item {% if request.endpoint in ['products'] %}active{% endif %}">
+                    <span class="nav-icon">◻</span>
+                    <span>Мои товары</span>
+                </a>
+                <div class="nav-section">AB-тестирование</div>
+                <a href="{{ url_for('ab_tests') }}" class="nav-item {% if 'ab_test' in request.endpoint %}active{% endif %}">
+                    <span class="nav-icon">⟺</span>
+                    <span>Тесты обложек</span>
+                </a>
+                <div class="nav-section">Аналитика</div>
+                <a href="{{ url_for('analytics') }}" class="nav-item {% if request.endpoint == 'analytics' %}active{% endif %}">
+                    <span class="nav-icon">▲</span>
+                    <span>Аналитика</span>
+                </a>
+                <a href="{{ url_for('advertising') }}" class="nav-item {% if request.endpoint == 'advertising' %}active{% endif %}">
+                    <span class="nav-icon">◎</span>
+                    <span>Реклама</span>
+                </a>
+                <div class="nav-section">Система</div>
+                <a href="{{ url_for('settings') }}" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
+                    <span class="nav-icon">⚙</span>
+                    <span>Настройки</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <span class="version">v1.0</span>
+            </div>
+        </aside>
+
+        <!-- Основной контент -->
+        <main class="main-content">
+            <div class="content-inner">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-container">
+                            {% for category, message in messages %}
+                                <div class="flash flash-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
