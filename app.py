@@ -155,6 +155,7 @@ def pause_test(test_id):
 @app.route('/ab-tests/<int:test_id>/delete', methods=['POST'])
 def delete_test(test_id):
     test = ABTest.query.get_or_404(test_id)
+    ABVariant.query.filter_by(test_id=test_id).delete()
     db.session.delete(test)
     db.session.commit()
     flash('Тест удалён', 'success')
