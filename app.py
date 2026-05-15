@@ -183,29 +183,52 @@ def api_covers_generate():
     s = Settings.query.first()
     if not s or not s.image_ai_api_key:
         return jsonify({'error': 'API-ключ OpenAI не настроен. Добавьте его в Настройки → Генерация изображений.'}), 400
-    data = request.get_json()
-    keyword = (data.get('keyword') or '').strip()
-    product_name = (data.get('product_name') or '').strip()
-    extra_hint = (data.get('extra_hint') or '').strip()
-    custom_prompt = (data.get('custom_prompt') or '').strip()
+    keyword = (request.form.get('keyword') or '').strip()
+    product_name = (request.form.get('product_name') or '').strip()
+    extra_hint = (request.form.get('extra_hint') or '').strip()
+    custom_prompt = (request.form.get('custom_prompt') or '').strip()
     if not keyword or not product_name:
         return jsonify({'error': 'Укажите ключевой запрос и название товара'}), 400
+
+    product_image_bytes = None
+    photo_file = request.files.get('product_photo')
+    if photo_file and photo_file.filename:
+        product_image_bytes = photo_file.read()
+
     from modules import cover_gen
     try:
         if custom_prompt:
             from openai import OpenAI
             client = OpenAI(api_key=s.image_ai_api_key)
-            img_resp = client.images.generate(
-                model='dall-e-3', prompt=custom_prompt[:4000],
-                size='1024x1024', quality='standard', n=1
-            )
+            if product_image_bytes:
+                from io import BytesIO
+                png = cover_gen._to_png_bytes(product_image_bytes)
+                img_resp = client.images.edit(
+                    model='gpt-image-1',
+                    image=('product.png', png, 'image/png'),
+                    prompt=custom_prompt[:4000],
+                    size='1024x1024',
+                )
+                b64 = img_resp.data[0].b64_json
+                generated_url = f'data:image/png;base64,{b64}'
+            else:
+                img_resp = client.images.generate(
+                    model='dall-e-3', prompt=custom_prompt[:4000],
+                    size='1024x1024', quality='standard', n=1
+                )
+                generated_url = img_resp.data[0].url
             return jsonify({
                 'covers': [], 'analysis': '',
                 'dalle_prompt': custom_prompt,
-                'generated_url': img_resp.data[0].url,
+                'generated_url': generated_url,
+                'used_product_photo': bool(product_image_bytes),
             })
-        full_hint = f'{product_name}. {extra_hint}' if extra_hint else product_name
-        result = cover_gen.analyze_and_generate(keyword, full_hint, s.image_ai_api_key)
+
+        result = cover_gen.analyze_and_generate(
+            keyword, product_name, s.image_ai_api_key,
+            product_image_bytes=product_image_bytes,
+            extra_hint=extra_hint,
+        )
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
