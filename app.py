@@ -1,12 +1,15 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from modules.database import db, Settings, Product, ABTest, ABVariant
 from modules import ab_test as ab_module
+from dotenv import load_dotenv
 import os
+
+load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
-app.secret_key = 'wb-secret-key-change-in-production'
+app.secret_key = os.environ.get('SECRET_KEY', 'wb-dev-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'data', 'wb_tool.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024

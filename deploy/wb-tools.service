@@ -1,0 +1,20 @@
+[Unit]
+Description=WB Tools Flask App
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/wb-tools
+Environment="PATH=/var/www/wb-tools/venv/bin"
+EnvironmentFile=/var/www/wb-tools/.env
+ExecStart=/var/www/wb-tools/venv/bin/gunicorn \
+    --workers 3 \
+    --bind unix:/run/wb-tools.sock \
+    --access-logfile /var/log/wb-tools/access.log \
+    --error-logfile /var/log/wb-tools/error.log \
+    app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
