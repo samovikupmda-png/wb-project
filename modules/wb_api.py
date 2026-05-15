@@ -67,20 +67,32 @@ def set_product_photo(api_key, vendor_code, photo_path, photo_number=1, client_s
             ext = photo_path.rsplit('.', 1)[-1].lower()
             mime = 'image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}'
             token = api_key.strip()
-            if not token.lower().startswith('bearer '):
-                token = f'Bearer {token}'
-            headers = {'Authorization': token}
-            if client_secret:
-                headers['X-Client-Secret'] = client_secret
-            r = requests.post(
-                f'{CONTENT_API}/content/v3/media/save',
-                params={'vendorCode': vendor_code, 'photoNumber': photo_number},
-                files={'uploadfile': (f'photo.{ext}', f, mime)},
-                headers=headers,
-                timeout=30
-            )
-            if r.status_code == 200:
-                return True, 'OK'
-            return False, r.text
+
+            # Try with Bearer prefix first, then without (old-style token)
+            auth_variants = []
+            if token.lower().startswith('bearer '):
+                auth_variants = [token]
+            else:
+                auth_variants = [f'Bearer {token}', token]
+
+            last_error = 'Unknown error'
+            for auth_value in auth_variants:
+                f.seek(0)
+                headers = {'Authorization': auth_value}
+                if client_secret:
+                    headers['X-Client-Secret'] = client_secret
+                r = requests.post(
+                    f'{CONTENT_API}/content/v3/media/save',
+                    params={'vendorCode': vendor_code, 'photoNumber': photo_number},
+                    files={'uploadfile': (f'photo.{ext}', f, mime)},
+                    headers=headers,
+                    timeout=30
+                )
+                if r.status_code == 200:
+                    return True, 'OK'
+                last_error = r.text
+                if r.status_code not in (401, 403):
+                    break
+            return False, last_error
     except Exception as e:
         return False, str(e)
