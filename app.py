@@ -195,13 +195,17 @@ def api_covers_generate():
     if photo_file and photo_file.filename:
         product_image_bytes = photo_file.read()
 
+    current_cover_bytes = None
+    cover_file = request.files.get('current_cover')
+    if cover_file and cover_file.filename:
+        current_cover_bytes = cover_file.read()
+
     from modules import cover_gen
     try:
         if custom_prompt:
             from openai import OpenAI
             client = OpenAI(api_key=s.image_ai_api_key)
             if product_image_bytes:
-                from io import BytesIO
                 png = cover_gen._to_png_bytes(product_image_bytes)
                 img_resp = client.images.edit(
                     model='gpt-image-1',
@@ -218,15 +222,17 @@ def api_covers_generate():
                 )
                 generated_url = img_resp.data[0].url
             return jsonify({
-                'covers': [], 'analysis': '',
+                'covers': [], 'analysis': '', 'cover_info': '',
                 'dalle_prompt': custom_prompt,
                 'generated_url': generated_url,
                 'used_product_photo': bool(product_image_bytes),
+                'used_current_cover': False,
             })
 
         result = cover_gen.analyze_and_generate(
             keyword, product_name, s.image_ai_api_key,
             product_image_bytes=product_image_bytes,
+            current_cover_bytes=current_cover_bytes,
             extra_hint=extra_hint,
         )
         return jsonify(result)

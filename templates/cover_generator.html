@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Генерация обложек</h1>
-    <p>Анализ конкурентов + ИИ создаёт обложку с вашим реальным товаром</p>
+    <p>Анализирует вашу обложку + конкурентов → создаёт новую с правильной информацией и реальным товаром</p>
 </div>
 
 <div class="card">
@@ -14,29 +14,45 @@
     <div class="card-body">
         <form id="gen-form" enctype="multipart/form-data">
 
-            <!-- Фото товара — главное поле -->
-            <div class="form-group">
-                <label class="form-label">
-                    Фото вашего товара
-                    <span style="color:#8b5cf6;font-weight:600;"> — обязательно для точной генерации</span>
-                </label>
-                <div id="photo-drop" style="
-                    border: 2px dashed #374151; border-radius: 12px;
-                    padding: 32px; text-align: center; cursor: pointer;
-                    transition: border-color 0.2s; position: relative;">
-                    <input type="file" id="product_photo" name="product_photo"
-                           accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;">
-                    <div id="photo-placeholder">
-                        <div style="font-size:32px;margin-bottom:8px;">📷</div>
-                        <div style="color:#9ca3af;font-size:14px;">Перетащите фото или нажмите для выбора</div>
-                        <div style="color:#6b7280;font-size:12px;margin-top:4px;">JPG, PNG · до 10 МБ</div>
+            <!-- Два загрузчика изображений -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+                <!-- Текущая обложка -->
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">
+                        Текущая обложка товара
+                        <span style="color:#8b5cf6;font-weight:600;"> — обязательно</span>
+                    </label>
+                    <div class="img-drop" id="cover-drop" data-target="current_cover">
+                        <input type="file" id="current_cover" name="current_cover"
+                               accept="image/*" class="drop-input">
+                        <div class="drop-placeholder" id="cover-placeholder">
+                            <div style="font-size:28px;margin-bottom:6px;">🖼</div>
+                            <div style="color:#9ca3af;font-size:13px;">Текущая обложка</div>
+                            <div style="color:#6b7280;font-size:11px;margin-top:3px;">ИИ прочитает весь текст с неё</div>
+                        </div>
+                        <img id="cover-preview" src="" alt="" class="drop-preview">
                     </div>
-                    <img id="photo-preview" src="" alt="" style="
-                        display:none; max-height:200px; border-radius:8px;
-                        max-width:100%; object-fit:contain;">
+                    <div class="form-hint">Количество капсул, claims, состав — всё будет перенесено в новую обложку</div>
                 </div>
-                <div class="form-hint">
-                    ИИ возьмёт ваш товар и поместит его в профессиональную обложку с учётом анализа конкурентов
+
+                <!-- Фото товара -->
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">
+                        Фото вашего товара (упаковка)
+                        <span style="color:#8b5cf6;font-weight:600;"> — обязательно</span>
+                    </label>
+                    <div class="img-drop" id="photo-drop" data-target="product_photo">
+                        <input type="file" id="product_photo" name="product_photo"
+                               accept="image/*" class="drop-input">
+                        <div class="drop-placeholder" id="photo-placeholder">
+                            <div style="font-size:28px;margin-bottom:6px;">📷</div>
+                            <div style="color:#9ca3af;font-size:13px;">Фото упаковки</div>
+                            <div style="color:#6b7280;font-size:11px;margin-top:3px;">Будет вставлено в готовую обложку</div>
+                        </div>
+                        <img id="photo-preview" src="" alt="" class="drop-preview">
+                    </div>
+                    <div class="form-hint">Любое качественное фото продукта — студийное, на белом фоне, из карточки</div>
                 </div>
             </div>
 
@@ -57,7 +73,7 @@
             <div class="form-group">
                 <label class="form-label">Дополнительные пожелания (необязательно)</label>
                 <input type="text" id="extra_hint" class="form-control"
-                       placeholder="Например: зелёные цвета, акцент на -7 кг за 14 дней, натуральный состав">
+                       placeholder="Например: акцент на зелёный цвет, добавить эффект до/после">
             </div>
 
             <button type="submit" class="btn btn-primary" id="gen-btn">
@@ -70,13 +86,22 @@
 <!-- Loader -->
 <div id="loader" style="display:none;text-align:center;padding:48px 0;">
     <div class="loader-spinner"></div>
-    <p id="loader-text" style="margin-top:16px;color:#9ca3af;font-size:14px;">
-        Ищем обложки конкурентов...
-    </p>
+    <p id="loader-text" style="margin-top:16px;color:#9ca3af;font-size:14px;">Читаем вашу обложку...</p>
 </div>
 
 <!-- Results -->
 <div id="results" style="display:none;">
+
+    <!-- Извлечённая информация с текущей обложки -->
+    <div id="cover-info-card" class="card" style="display:none;">
+        <div class="card-header">
+            <span class="card-title">Информация считана с вашей обложки</span>
+        </div>
+        <div class="card-body">
+            <div id="cover-info-text"
+                 style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:#e5e7eb;"></div>
+        </div>
+    </div>
 
     <div class="card">
         <div class="card-header">
@@ -91,7 +116,7 @@
 
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Анализ ИИ</span>
+            <span class="card-title">Анализ конкурентов</span>
         </div>
         <div class="card-body">
             <div id="analysis-text"
@@ -112,10 +137,15 @@
                 <img id="generated-img" src="" alt="Generated cover"
                      style="width:320px;height:320px;object-fit:cover;
                             border-radius:12px;border:1px solid #374151;">
-                <div id="photo-badge" style="display:none;margin-top:8px;
-                     background:#7c3aed20;border:1px solid #7c3aed;border-radius:6px;
-                     padding:6px 10px;font-size:12px;color:#a78bfa;text-align:center;">
-                    ✓ Использовано ваше фото товара
+                <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+                    <div id="badge-photo" style="display:none;background:#7c3aed20;border:1px solid #7c3aed;
+                         border-radius:6px;padding:5px 10px;font-size:12px;color:#a78bfa;text-align:center;">
+                        ✓ Использовано ваше фото товара
+                    </div>
+                    <div id="badge-cover" style="display:none;background:#065f4620;border:1px solid #059669;
+                         border-radius:6px;padding:5px 10px;font-size:12px;color:#34d399;text-align:center;">
+                        ✓ Информация перенесена с текущей обложки
+                    </div>
                 </div>
             </div>
             <div style="flex:1;min-width:240px;">
@@ -123,7 +153,7 @@
                 <div id="dalle-prompt"
                      style="font-size:12px;color:#6b7280;background:#111827;padding:12px;
                             border-radius:8px;white-space:pre-wrap;line-height:1.6;
-                            max-height:260px;overflow-y:auto;"></div>
+                            max-height:280px;overflow-y:auto;"></div>
             </div>
         </div>
     </div>
@@ -141,56 +171,69 @@
     animation:spin 0.8s linear infinite;margin:0 auto;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
+
+.img-drop {
+    border:2px dashed #374151;border-radius:12px;
+    padding:24px;text-align:center;cursor:pointer;
+    transition:border-color 0.2s;position:relative;
+    min-height:140px;display:flex;align-items:center;justify-content:center;
+}
+.img-drop:hover,.img-drop.drag-over { border-color:#8b5cf6; }
+.drop-input {
+    position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+}
+.drop-preview {
+    display:none;max-height:180px;max-width:100%;
+    border-radius:8px;object-fit:contain;
+}
 .competitor-thumb { border-radius:8px;overflow:hidden;background:#1f2937;border:1px solid #374151; }
 .competitor-thumb img { width:100%;aspect-ratio:1;object-fit:cover;display:block; }
 .competitor-thumb .thumb-name {
     font-size:11px;color:#9ca3af;padding:6px 8px;
     line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-#photo-drop:hover { border-color:#8b5cf6; }
-#photo-drop.drag-over { border-color:#8b5cf6;background:#8b5cf610; }
 .btn-sm { padding:6px 14px;font-size:13px; }
 </style>
 <script>
 let lastPrompt = '';
 let productPhotoFile = null;
+let currentCoverFile = null;
 
-// Photo upload & preview
-const photoDrop = document.getElementById('photo-drop');
-const photoInput = document.getElementById('product_photo');
-const photoPreview = document.getElementById('photo-preview');
-const photoPlaceholder = document.getElementById('photo-placeholder');
+function setupDrop(dropId, inputId, previewId, placeholderId, fileVar) {
+    const drop = document.getElementById(dropId);
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    const placeholder = document.getElementById(placeholderId);
 
-function showPreview(file) {
-    productPhotoFile = file;
-    const reader = new FileReader();
-    reader.onload = e => {
-        photoPreview.src = e.target.result;
-        photoPreview.style.display = 'block';
-        photoPlaceholder.style.display = 'none';
-    };
-    reader.readAsDataURL(file);
+    function showPreview(file) {
+        if (fileVar === 'photo') productPhotoFile = file;
+        else currentCoverFile = file;
+        const reader = new FileReader();
+        reader.onload = e => {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    input.addEventListener('change', () => { if (input.files[0]) showPreview(input.files[0]); });
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+    drop.addEventListener('drop', e => {
+        e.preventDefault(); drop.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) showPreview(file);
+    });
 }
 
-photoInput.addEventListener('change', () => {
-    if (photoInput.files[0]) showPreview(photoInput.files[0]);
-});
+setupDrop('cover-drop','current_cover','cover-preview','cover-placeholder','cover');
+setupDrop('photo-drop','product_photo','photo-preview','photo-placeholder','photo');
 
-photoDrop.addEventListener('dragover', e => { e.preventDefault(); photoDrop.classList.add('drag-over'); });
-photoDrop.addEventListener('dragleave', () => photoDrop.classList.remove('drag-over'));
-photoDrop.addEventListener('drop', e => {
-    e.preventDefault();
-    photoDrop.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) showPreview(file);
-});
-
-// Generation
 document.getElementById('gen-form').addEventListener('submit', async e => {
     e.preventDefault();
     await runGeneration(null);
 });
-
 document.getElementById('regen-btn').addEventListener('click', async () => {
     await runGeneration(lastPrompt);
 });
@@ -207,30 +250,30 @@ async function runGeneration(customPrompt) {
     document.getElementById('gen-btn').disabled = true;
 
     const steps = [
-        'Ищем обложки конкурентов на WB...',
-        'Загружаем изображения конкурентов...',
+        'Читаем информацию с вашей обложки...',
+        'Ищем топ конкурентов на WB...',
         'GPT-4o анализирует обложки...',
-        'ИИ создаёт обложку с вашим товаром...',
+        'Генерируем обложку с вашим товаром...',
     ];
     let stepIdx = 0;
     const loaderText = document.getElementById('loader-text');
     const timer = setInterval(() => {
         if (stepIdx < steps.length - 1) stepIdx++;
         loaderText.textContent = steps[stepIdx];
-    }, 7000);
+    }, 8000);
 
     try {
-        const formData = new FormData();
-        formData.append('keyword', keyword);
-        formData.append('product_name', productName);
-        formData.append('extra_hint', extraHint);
-        if (customPrompt) formData.append('custom_prompt', customPrompt);
-        if (productPhotoFile) formData.append('product_photo', productPhotoFile);
+        const fd = new FormData();
+        fd.append('keyword', keyword);
+        fd.append('product_name', productName);
+        fd.append('extra_hint', extraHint);
+        if (customPrompt) fd.append('custom_prompt', customPrompt);
+        if (productPhotoFile) fd.append('product_photo', productPhotoFile);
+        if (currentCoverFile) fd.append('current_cover', currentCoverFile);
 
-        const resp = await fetch('/api/covers/generate', { method: 'POST', body: formData });
+        const resp = await fetch('/api/covers/generate', { method: 'POST', body: fd });
         clearInterval(timer);
         const data = await resp.json();
-
         if (!resp.ok || data.error) { showError(data.error || 'Ошибка генерации'); return; }
         renderResults(data);
     } catch(err) {
@@ -243,6 +286,13 @@ async function runGeneration(customPrompt) {
 }
 
 function renderResults(data) {
+    // Cover info block
+    if (data.cover_info) {
+        document.getElementById('cover-info-text').textContent = data.cover_info;
+        document.getElementById('cover-info-card').style.display = 'block';
+    }
+
+    // Competitors
     const grid = document.getElementById('competitors-grid');
     grid.innerHTML = '';
     (data.covers || []).forEach(c => {
@@ -262,7 +312,6 @@ function renderResults(data) {
     const img = document.getElementById('generated-img');
     img.src = data.generated_url;
 
-    // Download
     const dlBtn = document.getElementById('download-btn');
     if (data.generated_url.startsWith('data:')) {
         dlBtn.href = data.generated_url;
@@ -270,14 +319,14 @@ function renderResults(data) {
     } else {
         dlBtn.href = data.generated_url;
         dlBtn.target = '_blank';
-        dlBtn.download = '';
+        dlBtn.removeAttribute('download');
     }
 
     lastPrompt = data.dalle_prompt || '';
     document.getElementById('dalle-prompt').textContent = lastPrompt;
 
-    const badge = document.getElementById('photo-badge');
-    badge.style.display = data.used_product_photo ? 'block' : 'none';
+    document.getElementById('badge-photo').style.display = data.used_product_photo ? 'block' : 'none';
+    document.getElementById('badge-cover').style.display = data.used_current_cover ? 'block' : 'none';
 
     document.getElementById('results').style.display = 'block';
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
@@ -287,6 +336,7 @@ function showError(msg) {
     const el = document.getElementById('error-block');
     el.textContent = msg;
     el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth' });
 }
 </script>
 {% endblock %}
