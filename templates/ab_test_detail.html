@@ -12,11 +12,6 @@
         <p>{{ test.product.name }} · Артикул: {{ test.product.wb_article }}</p>
     </div>
     <div class="flex gap-8">
-        <form action="{{ url_for('pause_test', test_id=test.id) }}" method="POST">
-            <button type="submit" class="btn btn-secondary">
-                {% if test.status == 'active' %}⏸ Пауза{% else %}▶ Возобновить{% endif %}
-            </button>
-        </form>
         <form action="{{ url_for('delete_test', test_id=test.id) }}" method="POST"
               onsubmit="return confirm('Удалить тест «{{ test.name }}»?')">
             <button type="submit" class="btn btn-danger">Удалить</button>
@@ -24,17 +19,40 @@
     </div>
 </div>
 
-<!-- Параметры теста -->
-<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-    <div class="stat-card">
-        <div class="stat-label">Статус</div>
-        <div style="margin-top: 8px;">
-            <span class="badge badge-{{ test.status }}" style="font-size: 13px; padding: 6px 14px;">
-                {% if test.status == 'active' %}● Активен
-                {% elif test.status == 'paused' %}⏸ Пауза
-                {% else %}✓ Завершён{% endif %}
-            </span>
+<!-- Управление статусом -->
+{% if test.status != 'completed' %}
+<div class="card" style="margin-bottom: 20px; border: 2px solid {% if test.status == 'active' %}var(--success){% else %}var(--border){% endif %};">
+    <div class="card-body" style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px;">
+        <div class="flex gap-12" style="align-items: center;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: {% if test.status == 'active' %}var(--success){% else %}#d1d5db{% endif %};{% if test.status == 'active' %} box-shadow: 0 0 0 3px rgba(16,185,129,0.2);{% endif %}"></div>
+            <div>
+                <div style="font-weight: 700; font-size: 15px;">
+                    {% if test.status == 'active' %}Тест запущен{% else %}Тест на паузе{% endif %}
+                </div>
+                <div class="text-secondary" style="font-size: 12px;">
+                    {% if test.status == 'active' %}Идёт сбор статистики{% else %}Нажмите «Запустить» для начала теста{% endif %}
+                </div>
+            </div>
         </div>
+        <form action="{{ url_for('pause_test', test_id=test.id) }}" method="POST">
+            {% if test.status == 'active' %}
+            <button type="submit" class="btn btn-secondary" style="font-size: 14px; padding: 10px 24px;">⏸ Приостановить</button>
+            {% else %}
+            <button type="submit" class="btn btn-primary" style="font-size: 14px; padding: 10px 24px;">▶ Запустить тест</button>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Параметры теста -->
+<div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+    <div class="stat-card">
+        <div class="stat-label">РК</div>
+        <div style="margin-top: 8px; font-size: 15px; font-weight: 700;">
+            {% if test.campaign_type == 'unified' %}Единая{% else %}Ручная{% endif %}
+        </div>
+        <div class="stat-sub">кампания</div>
     </div>
     <div class="stat-card accent">
         <div class="stat-label">Цель CTR</div>
@@ -48,6 +66,16 @@
     <div class="stat-card">
         <div class="stat-label">Ротация</div>
         <div class="stat-value">{{ test.rotation_interval }}<span style="font-size: 16px; font-weight: 500;"> мин</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Статус</div>
+        <div style="margin-top: 8px;">
+            <span class="badge badge-{{ test.status }}" style="font-size: 12px; padding: 5px 12px;">
+                {% if test.status == 'active' %}● Активен
+                {% elif test.status == 'paused' %}⏸ Пауза
+                {% else %}✓ Завершён{% endif %}
+            </span>
+        </div>
     </div>
 </div>
 

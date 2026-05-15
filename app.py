@@ -18,6 +18,13 @@ with app.app_context():
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
     os.makedirs(os.path.join(BASE_DIR, 'static', 'uploads'), exist_ok=True)
     db.create_all()
+    from sqlalchemy import text
+    with db.engine.connect() as conn:
+        try:
+            conn.execute(text('ALTER TABLE ab_test ADD COLUMN campaign_type VARCHAR(32) DEFAULT "manual"'))
+            conn.commit()
+        except Exception:
+            pass
     if not Settings.query.first():
         db.session.add(Settings())
         db.session.commit()
@@ -97,7 +104,8 @@ def create_ab_test():
         flash('Выберите товар и укажите название теста', 'error')
         return redirect(url_for('ab_tests'))
 
-    test = ab_module.create_test(product_id, name, target_ctr, min_impressions, rotation_interval)
+    campaign_type = request.form.get('campaign_type', 'manual')
+    test = ab_module.create_test(product_id, name, target_ctr, min_impressions, rotation_interval, campaign_type)
     flash(f'Тест «{name}» создан', 'success')
     return redirect(url_for('ab_test_detail', test_id=test.id))
 

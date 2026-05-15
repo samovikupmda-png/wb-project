@@ -20,14 +20,15 @@ def get_test(test_id):
     return ABTest.query.get_or_404(test_id)
 
 
-def create_test(product_id, name, target_ctr, min_impressions, rotation_interval):
+def create_test(product_id, name, target_ctr, min_impressions, rotation_interval, campaign_type='manual'):
     test = ABTest(
         product_id=product_id,
         name=name,
         target_ctr=float(target_ctr),
         min_impressions=int(min_impressions),
         rotation_interval=int(rotation_interval),
-        status='active'
+        campaign_type=campaign_type,
+        status='paused'
     )
     db.session.add(test)
     db.session.commit()

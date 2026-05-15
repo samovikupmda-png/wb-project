@@ -26,7 +26,8 @@ class ABTest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     name = db.Column(db.String(256), nullable=False)
-    status = db.Column(db.String(32), default='active')  # active, paused, completed
+    status = db.Column(db.String(32), default='paused')  # active, paused, completed
+    campaign_type = db.Column(db.String(32), default='manual')  # manual, unified
     target_ctr = db.Column(db.Float, default=3.0)
     min_impressions = db.Column(db.Integer, default=2000)
     rotation_interval = db.Column(db.Integer, default=30)  # minutes
