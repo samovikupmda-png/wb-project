@@ -60,7 +60,7 @@ def get_campaign_stats(api_key, campaign_id, days=7):
         return None
 
 
-def set_product_photo(api_key, vendor_code, photo_path, photo_number=1):
+def set_product_photo(api_key, vendor_code, photo_path, photo_number=1, client_secret=None):
     """Установить фото товара как обложку через Content API v3."""
     try:
         with open(photo_path, 'rb') as f:
@@ -69,11 +69,14 @@ def set_product_photo(api_key, vendor_code, photo_path, photo_number=1):
             token = api_key.strip()
             if not token.lower().startswith('bearer '):
                 token = f'Bearer {token}'
+            headers = {'Authorization': token}
+            if client_secret:
+                headers['X-Client-Secret'] = client_secret
             r = requests.post(
                 f'{CONTENT_API}/content/v3/media/save',
                 params={'vendorCode': vendor_code, 'photoNumber': photo_number},
                 files={'uploadfile': (f'photo.{ext}', f, mime)},
-                headers={'Authorization': token},
+                headers=headers,
                 timeout=30
             )
             if r.status_code == 200:

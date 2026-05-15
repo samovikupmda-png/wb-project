@@ -24,6 +24,7 @@ with app.app_context():
             'ALTER TABLE ab_test ADD COLUMN campaign_type VARCHAR(32) DEFAULT "manual"',
             'ALTER TABLE ab_test ADD COLUMN campaign_id INTEGER',
             'ALTER TABLE ab_test ADD COLUMN campaign_name VARCHAR(256) DEFAULT ""',
+            'ALTER TABLE settings ADD COLUMN wb_content_client_secret VARCHAR(256) DEFAULT ""',
         ]:
             try:
                 conn.execute(text(sql))
@@ -197,6 +198,7 @@ def save_settings():
     s = Settings.query.first()
     s.wb_stats_api_key = request.form.get('wb_stats_api_key', '').strip()
     s.wb_content_api_key = request.form.get('wb_content_api_key', '').strip()
+    s.wb_content_client_secret = request.form.get('wb_content_client_secret', '').strip()
     s.image_ai_api_key = request.form.get('image_ai_api_key', '').strip()
     db.session.commit()
     flash('Настройки сохранены', 'success')
@@ -248,7 +250,8 @@ def apply_variant_photo(test_id, variant_id):
     from modules import wb_api
     photo_path = os.path.join(BASE_DIR, 'static', 'uploads', variant.image_filename)
     success, msg = wb_api.set_product_photo(
-        s.wb_content_api_key, test.product.wb_article, photo_path
+        s.wb_content_api_key, test.product.wb_article, photo_path,
+        client_secret=s.wb_content_client_secret or None
     )
     if success:
         flash(f'Обложка «{variant.name}» применена на WB как главное фото', 'success')

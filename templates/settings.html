@@ -39,6 +39,20 @@
                     </div>
                 </div>
             </div>
+            <div class="form-group">
+                <label class="form-label">Client Secret (WB Content API)</label>
+                <input type="password" name="wb_content_client_secret" class="form-control"
+                       value="{{ settings.wb_content_client_secret or '' }}"
+                       placeholder="X-Client-Secret — выдаётся вместе с токеном">
+                <div class="form-hint">
+                    Если при создании токена WB выдал <strong>Client Secret</strong> — вставьте его сюда.
+                    Нужен для смены обложек через Content API v3.
+                    <div class="api-status" style="margin-top: 6px;">
+                        <div class="api-dot {% if settings.wb_content_client_secret %}connected{% else %}disconnected{% endif %}"></div>
+                        {% if settings.wb_content_client_secret %}Secret добавлен{% else %}Не указан{% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

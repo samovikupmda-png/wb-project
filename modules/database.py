@@ -8,6 +8,7 @@ class Settings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     wb_stats_api_key = db.Column(db.String(256), default='')
     wb_content_api_key = db.Column(db.String(256), default='')
+    wb_content_client_secret = db.Column(db.String(256), default='')
     image_ai_api_key = db.Column(db.String(256), default='')
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
