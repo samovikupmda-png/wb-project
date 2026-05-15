@@ -171,6 +171,46 @@ def delete_test(test_id):
     return redirect(url_for('ab_tests'))
 
 
+# ── Генерация обложек ─────────────────────────────────────────────────────────
+
+@app.route('/cover-generator')
+def cover_generator():
+    return render_template('cover_generator.html')
+
+
+@app.route('/api/covers/generate', methods=['POST'])
+def api_covers_generate():
+    s = Settings.query.first()
+    if not s or not s.image_ai_api_key:
+        return jsonify({'error': 'API-ключ OpenAI не настроен. Добавьте его в Настройки → Генерация изображений.'}), 400
+    data = request.get_json()
+    keyword = (data.get('keyword') or '').strip()
+    product_name = (data.get('product_name') or '').strip()
+    extra_hint = (data.get('extra_hint') or '').strip()
+    custom_prompt = (data.get('custom_prompt') or '').strip()
+    if not keyword or not product_name:
+        return jsonify({'error': 'Укажите ключевой запрос и название товара'}), 400
+    from modules import cover_gen
+    try:
+        if custom_prompt:
+            from openai import OpenAI
+            client = OpenAI(api_key=s.image_ai_api_key)
+            img_resp = client.images.generate(
+                model='dall-e-3', prompt=custom_prompt[:4000],
+                size='1024x1024', quality='standard', n=1
+            )
+            return jsonify({
+                'covers': [], 'analysis': '',
+                'dalle_prompt': custom_prompt,
+                'generated_url': img_resp.data[0].url,
+            })
+        full_hint = f'{product_name}. {extra_hint}' if extra_hint else product_name
+        result = cover_gen.analyze_and_generate(keyword, full_hint, s.image_ai_api_key)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── Аналитика ─────────────────────────────────────────────────────────────────
 
 @app.route('/analytics')
