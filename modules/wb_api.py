@@ -67,19 +67,20 @@ def set_product_photo(api_key, vendor_code, photo_path, photo_number=1, client_s
             ext = photo_path.rsplit('.', 1)[-1].lower()
             mime = 'image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}'
             token = api_key.strip()
-
-            # Try with Bearer prefix first, then without (old-style token)
+            # WB Content API v3 (s2s): token without Bearer + X-Client-Secret
+            # Try plain token first, then with Bearer prefix
             auth_variants = []
             if token.lower().startswith('bearer '):
-                auth_variants = [token]
+                plain = token[7:]
+                auth_variants = [(plain, True), (token, False)]
             else:
-                auth_variants = [f'Bearer {token}', token]
+                auth_variants = [(token, True), (f'Bearer {token}', False)]
 
             last_error = 'Unknown error'
-            for auth_value in auth_variants:
+            for auth_value, use_secret in auth_variants:
                 f.seek(0)
                 headers = {'Authorization': auth_value}
-                if client_secret:
+                if client_secret and use_secret:
                     headers['X-Client-Secret'] = client_secret
                 r = requests.post(
                     f'{CONTENT_API}/content/v3/media/save',

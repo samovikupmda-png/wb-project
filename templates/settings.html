@@ -39,8 +39,19 @@
                     </div>
                 </div>
             </div>
-            <div class="form-group" style="display:none">
-                <input type="hidden" name="wb_content_client_secret" value="{{ settings.wb_content_client_secret or '' }}">
+            <div class="form-group">
+                <label class="form-label">Client Secret (WB Content API)</label>
+                <input type="password" name="wb_content_client_secret" class="form-control"
+                       value="{{ settings.wb_content_client_secret or '' }}"
+                       placeholder="Секрет, показанный при создании токена контента">
+                <div class="form-hint">
+                    WB показывает Client Secret <strong>один раз</strong> при создании токена.<br>
+                    Если не сохранили — удалите токен контента в кабинете WB и создайте новый, скопировав секрет.
+                    <div class="api-status" style="margin-top: 6px;">
+                        <div class="api-dot {% if settings.wb_content_client_secret %}connected{% else %}disconnected{% endif %}"></div>
+                        {% if settings.wb_content_client_secret %}Secret добавлен{% else %}Не указан — смена обложек недоступна{% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
