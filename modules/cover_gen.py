@@ -7,36 +7,77 @@ from openai import OpenAI
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
 
-def _wb_image_url(nm, photo_number=1):
+def _wb_image_url(nm, photo_number=1, basket=None):
     nm = int(nm)
     vol = nm // 100000
     part = nm // 1000
-    baskets = [
-        (143, '01'), (287, '02'), (431, '03'), (719, '04'),
-        (1007, '05'), (1061, '06'), (1115, '07'), (1169, '08'),
-        (1313, '09'), (1601, '10'), (1655, '11'), (1919, '12'),
-        (2045, '13'), (2189, '14'), (2405, '15'), (2621, '16'),
-        (2837, '17'),
-    ]
-    basket = '18'
-    for threshold, b in baskets:
-        if vol <= threshold:
-            basket = b
-            break
+    if basket is None:
+        baskets = [
+            (143, '01'), (287, '02'), (431, '03'), (719, '04'),
+            (1007, '05'), (1061, '06'), (1115, '07'), (1169, '08'),
+            (1313, '09'), (1601, '10'), (1655, '11'), (1919, '12'),
+            (2045, '13'), (2189, '14'), (2405, '15'), (2621, '16'),
+            (2837, '17'), (3053, '18'), (3269, '19'), (3485, '20'),
+            (3701, '21'), (3917, '22'), (4133, '23'), (4349, '24'),
+            (4565, '25'), (4781, '26'), (4997, '27'), (5213, '28'),
+            (5429, '29'), (5645, '30'), (5861, '31'), (6077, '32'),
+            (6293, '33'), (6509, '34'), (6725, '35'), (6941, '36'),
+            (7157, '37'), (7373, '38'), (7589, '39'), (7805, '40'),
+            (8021, '41'), (8237, '42'), (8453, '43'), (8669, '44'),
+            (8885, '45'), (9101, '46'), (9317, '47'), (9533, '48'),
+            (9749, '49'),
+        ]
+        basket = '50'
+        for threshold, b in baskets:
+            if vol <= threshold:
+                basket = b
+                break
     return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
+
+
+def _find_correct_basket(nm, photo_number=1):
+    """Try to find the correct basket by probing the WB CDN."""
+    nm = int(nm)
+    vol = nm // 100000
+    part = nm // 1000
+    # Try the calculated basket first, then nearby ones
+    calculated = _wb_image_url(nm, photo_number)
+    try:
+        r = requests.head(calculated, timeout=5, headers=HEADERS)
+        if r.status_code == 200:
+            return calculated
+    except Exception:
+        pass
+    # Probe baskets around the expected range
+    for b in range(1, 55):
+        basket = str(b).zfill(2)
+        url = f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
+        try:
+            r = requests.head(url, timeout=4, headers=HEADERS)
+            if r.status_code == 200:
+                return url
+        except Exception:
+            continue
+    return None
 
 
 def fetch_product_photos(article, max_photos=5):
     """Fetch all available product photos from WB CDN by article number."""
     photos = []
+    # Find correct basket for photo #1 first
+    correct_url_1 = _find_correct_basket(article, photo_number=1)
+    if not correct_url_1:
+        return []
+    # Extract basket from found URL
+    basket = correct_url_1.split('basket-')[1].split('.')[0]
     for i in range(1, max_photos + 1):
-        url = _wb_image_url(article, photo_number=i)
+        url = _wb_image_url(article, photo_number=i, basket=basket)
         try:
             r = requests.get(url, timeout=8, headers=HEADERS)
             if r.status_code == 200 and len(r.content) > 5000:
                 photos.append({'number': i, 'url': url, 'bytes': r.content})
             else:
-                break  # WB returns 404 or tiny image when no more photos
+                break
         except Exception:
             break
     return photos
