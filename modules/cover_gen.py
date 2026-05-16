@@ -33,29 +33,15 @@ def _wb_image_url(nm, photo_number=1, basket=None):
     return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
 
 
-def fetch_product_photos(article, max_photos=5):
-    """Fetch all available product photos from WB CDN by article number."""
+def get_product_photo_urls(article, max_photos=6):
+    """Return WB CDN URLs for product photos (no server-side download needed)."""
     nm = int(article)
     vol = nm // 100000
     basket = _calc_basket(vol)
-    photos = []
-    for i in range(1, max_photos + 1):
-        url = _wb_image_url(nm, photo_number=i, basket=basket)
-        try:
-            r = requests.get(url, timeout=8, headers=HEADERS)
-            if r.status_code == 200 and len(r.content) > 5000:
-                photos.append({'number': i, 'url': url, 'bytes': r.content})
-            else:
-                break
-        except Exception:
-            break
-    return photos
-
-
-def fetch_wb_cover_by_article(article):
-    """Fetch the current cover (photo #1) of a WB product."""
-    photos = fetch_product_photos(article, max_photos=1)
-    return photos[0]['bytes'] if photos else None
+    return [
+        {'number': i, 'url': _wb_image_url(nm, photo_number=i, basket=basket)}
+        for i in range(1, max_photos + 1)
+    ]
 
 
 def search_wb_covers(keyword, limit=8):
@@ -88,20 +74,15 @@ def search_wb_covers(keyword, limit=8):
 
 
 def _load_competitor_images(covers, max_load=4):
+    """Pass WB URLs directly to OpenAI — OpenAI fetches from its own servers."""
     image_content = []
     valid_covers = []
     for c in covers[:max_load]:
-        try:
-            resp = requests.get(c['url'], timeout=6, headers=HEADERS)
-            if resp.status_code == 200 and len(resp.content) > 3000:
-                b64 = base64.b64encode(resp.content).decode()
-                image_content.append({
-                    'type': 'image_url',
-                    'image_url': {'url': f'data:image/jpeg;base64,{b64}', 'detail': 'low'}
-                })
-                valid_covers.append(c)
-        except Exception:
-            continue
+        image_content.append({
+            'type': 'image_url',
+            'image_url': {'url': c['url'], 'detail': 'low'}
+        })
+        valid_covers.append(c)
     return image_content, valid_covers
 
 
@@ -113,18 +94,7 @@ def _to_png_bytes(image_bytes):
     return out
 
 
-def extract_cover_info(current_cover_bytes, openai_key):
-    """Use GPT-4o to extract all text and product info from the current cover."""
-    client = OpenAI(api_key=openai_key)
-    b64 = base64.b64encode(current_cover_bytes).decode()
-    resp = client.chat.completions.create(
-        model='gpt-4o',
-        messages=[{
-            'role': 'user',
-            'content': [
-                {
-                    'type': 'text',
-                    'text': """Внимательно прочитай эту обложку товара и выпиши ВЕСЬ текст и информацию с неё.
+COVER_INFO_PROMPT = """Внимательно прочитай эту обложку товара и выпиши ВЕСЬ текст и информацию с неё.
 
 Включи абсолютно всё:
 - Название товара и бренд
@@ -141,13 +111,32 @@ def extract_cover_info(current_cover_bytes, openai_key):
 
 КЛЮЧЕВЫЕ CLAIMS ДЛЯ НОВОЙ ОБЛОЖКИ:
 [Самые важные маркетинговые утверждения, которые ОБЯЗАТЕЛЬНО должны быть на новой обложке]"""
-                },
-                {
-                    'type': 'image_url',
-                    'image_url': {'url': f'data:image/jpeg;base64,{b64}', 'detail': 'high'}
-                }
-            ]
-        }],
+
+
+def extract_cover_info_by_url(image_url, openai_key):
+    """Extract all text and info from cover — OpenAI fetches URL directly."""
+    client = OpenAI(api_key=openai_key)
+    resp = client.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': [
+            {'type': 'text', 'text': COVER_INFO_PROMPT},
+            {'type': 'image_url', 'image_url': {'url': image_url, 'detail': 'high'}},
+        ]}],
+        max_tokens=600
+    )
+    return resp.choices[0].message.content
+
+
+def extract_cover_info(current_cover_bytes, openai_key):
+    """Extract all text from uploaded cover image (bytes)."""
+    client = OpenAI(api_key=openai_key)
+    b64 = base64.b64encode(current_cover_bytes).decode()
+    resp = client.chat.completions.create(
+        model='gpt-4o',
+        messages=[{'role': 'user', 'content': [
+            {'type': 'text', 'text': COVER_INFO_PROMPT},
+            {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{b64}', 'detail': 'high'}},
+        ]}],
         max_tokens=600
     )
     return resp.choices[0].message.content
@@ -156,6 +145,7 @@ def extract_cover_info(current_cover_bytes, openai_key):
 def analyze_and_generate(keyword, product_name, openai_key,
                          article=None,
                          product_photo_number=1,
+                         product_image_bytes=None,
                          extra_hint='',
                          n_competitors=6):
     """
@@ -168,24 +158,18 @@ def analyze_and_generate(keyword, product_name, openai_key,
     """
     client = OpenAI(api_key=openai_key)
 
-    # Step 1: Fetch current cover and product photo from WB
-    current_cover_bytes = None
-    product_image_bytes = None
-    fetched_photos = []
+    # Step 1: Get product photo URLs (no server-side download — WB blocks VPS IPs)
+    photo_urls = get_product_photo_urls(article, max_photos=6) if article else []
+    cover_url = photo_urls[0]['url'] if photo_urls else None
+    selected_url = next(
+        (p['url'] for p in photo_urls if p['number'] == product_photo_number),
+        cover_url
+    )
 
-    if article:
-        fetched_photos = fetch_product_photos(article, max_photos=6)
-        if fetched_photos:
-            current_cover_bytes = fetched_photos[0]['bytes']  # cover = photo #1
-            # Use selected photo number as product image (default: cover)
-            selected = next((p for p in fetched_photos if p['number'] == product_photo_number),
-                            fetched_photos[0])
-            product_image_bytes = selected['bytes']
-
-    # Step 2: Extract info from current cover
+    # Step 2: Extract info from current cover — pass URL directly to OpenAI
     cover_info = ''
-    if current_cover_bytes:
-        cover_info = extract_cover_info(current_cover_bytes, openai_key)
+    if cover_url:
+        cover_info = extract_cover_info_by_url(cover_url, openai_key)
 
     # Step 3: Fetch competitor covers
     covers = search_wb_covers(keyword, limit=n_competitors)
@@ -234,8 +218,10 @@ def analyze_and_generate(keyword, product_name, openai_key,
             f'white or gradient background, studio lighting, photorealistic.'
         )
 
-    # Step 5: Generate with real product photo
+    # Step 5: Generate
+    # Priority: manually uploaded photo bytes > WB URL passed to OpenAI
     if product_image_bytes:
+        # User uploaded a photo manually
         full_prompt = (
             f'Create a professional Wildberries marketplace cover image. '
             f'Keep the product from the reference image exactly as-is — '
@@ -251,19 +237,17 @@ def analyze_and_generate(keyword, product_name, openai_key,
                 size='1024x1024',
                 timeout=180,
             )
-            img_b64 = img_resp.data[0].b64_json
-            generated_url = f'data:image/png;base64,{img_b64}'
+            generated_url = f'data:image/png;base64,{img_resp.data[0].b64_json}'
+            used_photo = True
         except Exception:
-            # Fallback to DALL-E 3 if gpt-image-1 unavailable
             img_resp = client.images.generate(
-                model='dall-e-3',
-                prompt=dalle_prompt[:4000],
-                size='1024x1024',
-                quality='standard',
-                n=1,
+                model='dall-e-3', prompt=dalle_prompt[:4000],
+                size='1024x1024', quality='standard', n=1,
             )
             generated_url = img_resp.data[0].url
+            used_photo = False
     else:
+        # No manual upload — DALL-E 3 with detailed text prompt
         img_resp = client.images.generate(
             model='dall-e-3',
             prompt=dalle_prompt[:4000],
@@ -272,6 +256,7 @@ def analyze_and_generate(keyword, product_name, openai_key,
             n=1,
         )
         generated_url = img_resp.data[0].url
+        used_photo = False
 
     return {
         'covers': valid_covers,
@@ -279,7 +264,7 @@ def analyze_and_generate(keyword, product_name, openai_key,
         'analysis': analysis_text,
         'dalle_prompt': dalle_prompt,
         'generated_url': generated_url,
-        'fetched_photos': [{'number': p['number'], 'url': p['url']} for p in fetched_photos],
-        'used_product_photo': bool(product_image_bytes),
-        'used_current_cover': bool(current_cover_bytes),
+        'photo_urls': photo_urls,
+        'used_product_photo': used_photo,
+        'used_current_cover': bool(cover_info),
     }

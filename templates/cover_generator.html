@@ -34,17 +34,32 @@
                 </select>
             </div>
 
-            <!-- Превью фото с WB -->
+            <!-- Превью фото с WB (загружается браузером напрямую) -->
             <div id="photos-block" style="display:none;margin-bottom:20px;">
-                <label class="form-label">Фото товара на WB — выберите, какое использовать для генерации</label>
-                <div id="photos-loading" style="color:#9ca3af;font-size:13px;padding:8px 0;">
-                    Загружаем фото с WB...
+                <label class="form-label">Фото товара на WB — выберите для генерации</label>
+                <div id="photos-grid" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"></div>
+                <div class="form-hint" style="margin-top:8px;">
+                    Нажмите на фото чтобы выбрать его. Или загрузите своё фото ниже для точной генерации с реальным товаром.
                 </div>
-                <div id="photos-grid"
-                     style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"></div>
-                <div class="form-hint">
-                    Выбранное фото — основа для генерации. ИИ сохранит упаковку, этикетку и форму товара точно.
+            </div>
+
+            <!-- Ручная загрузка фото (для точной генерации через gpt-image-1) -->
+            <div id="upload-block" style="display:none;margin-bottom:20px;">
+                <label class="form-label">
+                    Загрузить фото товара вручную
+                    <span style="color:#8b5cf6;font-weight:600;"> — для точной генерации с реальным товаром</span>
+                </label>
+                <div id="photo-drop" style="border:2px dashed #374151;border-radius:12px;padding:20px;
+                     text-align:center;cursor:pointer;position:relative;transition:border-color 0.2s;">
+                    <input type="file" id="product_photo" accept="image/*"
+                           style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+                    <div id="upload-placeholder">
+                        <div style="font-size:24px;margin-bottom:4px;">📷</div>
+                        <div style="color:#9ca3af;font-size:13px;">Перетащите или нажмите для выбора</div>
+                    </div>
+                    <img id="upload-preview" src="" style="display:none;max-height:160px;border-radius:8px;object-fit:contain;">
                 </div>
+                <div class="form-hint">Скачайте нужное фото с WB и загрузите сюда — ИИ сохранит упаковку точно.</div>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
@@ -173,10 +188,35 @@ let selectedPhotoNumber = 1;
 let selectedProductId = null;
 let selectedArticle = null;
 let lastPrompt = '';
+let manualPhotoFile = null;
 
 const productSelect = document.getElementById('product_select');
 const genBtn = document.getElementById('gen-btn');
 const noHint = document.getElementById('no-product-hint');
+
+// Manual photo upload
+const photoInput = document.getElementById('product_photo');
+const photoDrop = document.getElementById('photo-drop');
+photoInput && photoInput.addEventListener('change', () => {
+    if (photoInput.files[0]) showUploadPreview(photoInput.files[0]);
+});
+photoDrop && photoDrop.addEventListener('dragover', e => { e.preventDefault(); photoDrop.style.borderColor='#8b5cf6'; });
+photoDrop && photoDrop.addEventListener('dragleave', () => { photoDrop.style.borderColor='#374151'; });
+photoDrop && photoDrop.addEventListener('drop', e => {
+    e.preventDefault(); photoDrop.style.borderColor='#374151';
+    if (e.dataTransfer.files[0]) showUploadPreview(e.dataTransfer.files[0]);
+});
+
+function showUploadPreview(file) {
+    manualPhotoFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('upload-preview').src = e.target.result;
+        document.getElementById('upload-preview').style.display = 'block';
+        document.getElementById('upload-placeholder').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
 
 productSelect && productSelect.addEventListener('change', function() {
     const opt = this.options[this.selectedIndex];
@@ -187,6 +227,7 @@ productSelect && productSelect.addEventListener('change', function() {
         genBtn.disabled = true;
         noHint.style.display = '';
         document.getElementById('photos-block').style.display = 'none';
+        document.getElementById('upload-block').style.display = 'none';
         return;
     }
 
@@ -197,30 +238,32 @@ productSelect && productSelect.addEventListener('change', function() {
 
 async function loadProductPhotos(article) {
     const block = document.getElementById('photos-block');
-    const loading = document.getElementById('photos-loading');
     const grid = document.getElementById('photos-grid');
+    const uploadBlock = document.getElementById('upload-block');
     block.style.display = 'block';
-    loading.style.display = 'block';
-    grid.innerHTML = '';
+    grid.innerHTML = '<span style="color:#9ca3af;font-size:13px;">Загружаем...</span>';
     selectedPhotoNumber = 1;
 
     try {
         const resp = await fetch(`/api/wb/product-photos/${article}`);
         const data = await resp.json();
-        loading.style.display = 'none';
+        grid.innerHTML = '';
 
         if (!data.photos || data.photos.length === 0) {
-            loading.textContent = 'Фото не найдены. Проверьте артикул.';
-            loading.style.display = 'block';
+            grid.innerHTML = '<span style="color:#f87171;font-size:13px;">Фото не найдены на WB</span>';
+            uploadBlock.style.display = 'block';
             return;
         }
 
+        // Show WB photos — browser fetches them directly (works, VPS can't but browser can)
         data.photos.forEach((p, idx) => {
             const img = document.createElement('img');
-            img.src = p.url;
             img.className = 'wb-photo-thumb' + (idx === 0 ? ' selected' : '');
             img.title = `Фото ${p.number}`;
             img.dataset.number = p.number;
+            img.dataset.url = p.url;
+            img.src = p.url;
+            img.onerror = () => img.closest('.wb-photo-wrap')?.remove();
             img.addEventListener('click', () => {
                 document.querySelectorAll('.wb-photo-thumb').forEach(i => i.classList.remove('selected'));
                 img.classList.add('selected');
@@ -228,8 +271,12 @@ async function loadProductPhotos(article) {
             });
             grid.appendChild(img);
         });
+
+        // Always show manual upload option below
+        uploadBlock.style.display = 'block';
     } catch(e) {
-        loading.textContent = 'Не удалось загрузить фото.';
+        grid.innerHTML = '<span style="color:#f87171;font-size:13px;">Ошибка загрузки фото</span>';
+        uploadBlock.style.display = 'block';
     }
 }
 
@@ -266,17 +313,15 @@ async function runGeneration(customPrompt) {
     }, 8000);
 
     try {
-        const resp = await fetch('/api/covers/generate', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                product_id: selectedProductId,
-                photo_number: selectedPhotoNumber,
-                keyword,
-                extra_hint: extraHint,
-                custom_prompt: customPrompt || '',
-            })
-        });
+        const fd = new FormData();
+        fd.append('product_id', selectedProductId);
+        fd.append('photo_number', selectedPhotoNumber);
+        fd.append('keyword', keyword);
+        fd.append('extra_hint', extraHint);
+        fd.append('custom_prompt', customPrompt || '');
+        if (manualPhotoFile) fd.append('product_photo', manualPhotoFile);
+
+        const resp = await fetch('/api/covers/generate', { method: 'POST', body: fd });
         clearInterval(timer);
         const data = await resp.json();
         if (!resp.ok || data.error) { showError(data.error || 'Ошибка генерации'); return; }

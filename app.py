@@ -182,8 +182,8 @@ def cover_generator():
 @app.route('/api/wb/product-photos/<article>')
 def api_product_photos(article):
     from modules import cover_gen
-    photos = cover_gen.fetch_product_photos(article, max_photos=6)
-    return jsonify({'photos': [{'number': p['number'], 'url': p['url']} for p in photos]})
+    photos = cover_gen.get_product_photo_urls(article, max_photos=6)
+    return jsonify({'photos': photos})
 
 
 @app.route('/api/covers/generate', methods=['POST'])
@@ -192,34 +192,41 @@ def api_covers_generate():
     if not s or not s.image_ai_api_key:
         return jsonify({'error': 'API-ключ OpenAI не настроен. Добавьте его в Настройки → Генерация изображений.'}), 400
 
-    data = request.get_json()
-    product_id = data.get('product_id')
-    keyword = (data.get('keyword') or '').strip()
-    extra_hint = (data.get('extra_hint') or '').strip()
-    custom_prompt = (data.get('custom_prompt') or '').strip()
-    photo_number = int(data.get('photo_number') or 1)
+    product_id = request.form.get('product_id')
+    keyword = (request.form.get('keyword') or '').strip()
+    extra_hint = (request.form.get('extra_hint') or '').strip()
+    custom_prompt = (request.form.get('custom_prompt') or '').strip()
+    photo_number = int(request.form.get('photo_number') or 1)
 
     if not keyword or not product_id:
         return jsonify({'error': 'Укажите товар и ключевой запрос'}), 400
 
     product = Product.query.get_or_404(product_id)
-    from modules import cover_gen
 
+    product_image_bytes = None
+    photo_file = request.files.get('product_photo')
+    if photo_file and photo_file.filename:
+        product_image_bytes = photo_file.read()
+
+    from modules import cover_gen
     try:
         if custom_prompt:
             from openai import OpenAI
             client = OpenAI(api_key=s.image_ai_api_key)
-            photos = cover_gen.fetch_product_photos(product.wb_article, max_photos=photo_number)
-            selected = next((p for p in photos if p['number'] == photo_number), photos[0] if photos else None)
-            if selected:
-                png = cover_gen._to_png_bytes(selected['bytes'])
-                img_resp = client.images.edit(
-                    model='gpt-image-1',
-                    image=('product.png', png, 'image/png'),
-                    prompt=custom_prompt[:4000],
-                    size='1024x1024',
-                )
-                generated_url = f'data:image/png;base64,{img_resp.data[0].b64_json}'
+            if product_image_bytes:
+                png = cover_gen._to_png_bytes(product_image_bytes)
+                try:
+                    img_resp = client.images.edit(
+                        model='gpt-image-1', image=('product.png', png, 'image/png'),
+                        prompt=custom_prompt[:4000], size='1024x1024', timeout=180,
+                    )
+                    generated_url = f'data:image/png;base64,{img_resp.data[0].b64_json}'
+                except Exception:
+                    img_resp = client.images.generate(
+                        model='dall-e-3', prompt=custom_prompt[:4000],
+                        size='1024x1024', quality='standard', n=1
+                    )
+                    generated_url = img_resp.data[0].url
             else:
                 img_resp = client.images.generate(
                     model='dall-e-3', prompt=custom_prompt[:4000],
@@ -228,16 +235,15 @@ def api_covers_generate():
                 generated_url = img_resp.data[0].url
             return jsonify({
                 'covers': [], 'analysis': '', 'cover_info': '',
-                'dalle_prompt': custom_prompt,
-                'generated_url': generated_url,
-                'used_product_photo': bool(selected),
-                'used_current_cover': False,
+                'dalle_prompt': custom_prompt, 'generated_url': generated_url,
+                'used_product_photo': bool(product_image_bytes), 'used_current_cover': False,
             })
 
         result = cover_gen.analyze_and_generate(
             keyword, product.name, s.image_ai_api_key,
             article=product.wb_article,
             product_photo_number=photo_number,
+            product_image_bytes=product_image_bytes,
             extra_hint=extra_hint,
         )
         return jsonify(result)
