@@ -22,40 +22,43 @@
 {% endwith %}
 
 {% if products %}
-<div class="card">
-    <div class="card-body" style="padding: 0;">
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Артикул WB</th>
-                        <th>Название</th>
-                        <th>Категория</th>
-                        <th>AB-тестов</th>
-                        <th>Добавлен</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for p in products %}
-                    <tr>
-                        <td><span class="fw-600" style="color: var(--wb-purple);">{{ p.wb_article }}</span></td>
-                        <td>{{ p.name }}</td>
-                        <td class="text-secondary">{{ p.category or '—' }}</td>
-                        <td>{{ p.ab_tests | length }}</td>
-                        <td class="text-secondary">{{ p.created_at.strftime('%d.%m.%Y') }}</td>
-                        <td>
-                            <form action="{{ url_for('delete_product', product_id=p.id) }}" method="POST"
-                                  onsubmit="return confirm('Удалить товар «{{ p.name }}»?')">
-                                <button type="submit" class="btn btn-danger btn-sm">Удалить</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
+    {% for p in products %}
+    <div class="card" style="margin:0;">
+        <div style="position:relative;background:#111827;border-radius:12px 12px 0 0;overflow:hidden;aspect-ratio:1;">
+            <img src="{{ wb_cover_url(p.wb_article) }}"
+                 alt="{{ p.name }}"
+                 style="width:100%;height:100%;object-fit:cover;display:block;"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;
+                        color:#4b5563;font-size:40px;position:absolute;top:0;left:0;">◻</div>
+            <div style="position:absolute;top:8px;right:8px;">
+                <a href="{{ url_for('cover_generator') }}?product_id={{ p.id }}"
+                   class="btn btn-primary btn-sm"
+                   style="font-size:11px;padding:4px 10px;opacity:0.9;">
+                   ✦ Генерировать
+                </a>
+            </div>
+        </div>
+        <div class="card-body" style="padding:12px 14px;">
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px;
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                 title="{{ p.name }}">{{ p.name }}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="color:var(--wb-purple);font-size:12px;font-weight:600;">арт. {{ p.wb_article }}</span>
+                <span style="color:#6b7280;font-size:11px;">{{ p.category or '—' }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:12px;color:#9ca3af;">AB-тестов: {{ p.ab_tests | length }}</span>
+                <form action="{{ url_for('delete_product', product_id=p.id) }}" method="POST" style="margin:0;">
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            style="font-size:11px;padding:3px 10px;"
+                            onclick="return confirm('Удалить товар «{{ p.name }}»?')">Удалить</button>
+                </form>
+            </div>
         </div>
     </div>
+    {% endfor %}
 </div>
 {% else %}
 <div class="card">
@@ -63,8 +66,13 @@
         <div class="empty-state">
             <div class="empty-icon">◻</div>
             <div class="empty-title">Товаров пока нет</div>
-            <div class="empty-text">Добавьте товары, чтобы начать работу с AB-тестированием и аналитикой</div>
-            <button class="btn btn-primary" onclick="openModal('addProductModal')">Добавить товар</button>
+            <div class="empty-text">Нажмите «Синхронизировать с WB» чтобы подтянуть товары из кабинета</div>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                <form action="{{ url_for('sync_products') }}" method="POST" style="margin:0;">
+                    <button type="submit" class="btn btn-primary">↻ Синхронизировать с WB</button>
+                </form>
+                <button class="btn btn-secondary" onclick="openModal('addProductModal')">Добавить вручную</button>
+            </div>
         </div>
     </div>
 </div>
@@ -92,6 +100,7 @@
                     <label class="form-label">Категория</label>
                     <select name="category" class="form-control">
                         <option value="">— выберите —</option>
+                        <option value="Жиросжигатели">Жиросжигатели</option>
                         <option value="Сыворотки">Сыворотки</option>
                         <option value="Кремы для лица">Кремы для лица</option>
                         <option value="БАДы для похудения">БАДы для похудения</option>
@@ -109,4 +118,3 @@
     </div>
 </div>
 {% endblock %}
-

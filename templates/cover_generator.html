@@ -4,157 +4,198 @@
 {% block content %}
 <div class="page-header">
     <h1>Генерация обложек</h1>
-    <p>Выбери товар → ИИ сам тянет обложку и фото с WB → анализирует конкурентов → генерирует</p>
+    <p>ИИ анализирует вашу текущую обложку → парсит конкурентов → генерирует новую с вашим продуктом и текстом</p>
 </div>
 
 {% if not products %}
 <div class="card">
     <div class="card-body" style="text-align:center;padding:40px;">
         <div style="font-size:48px;margin-bottom:16px;">📦</div>
-        <p style="color:#9ca3af;">Сначала добавь товары в <a href="{{ url_for('products') }}" style="color:#8b5cf6;">разделе «Мои товары»</a></p>
+        <p style="color:#9ca3af;">Сначала добавьте товары в <a href="{{ url_for('products') }}" style="color:#8b5cf6;">разделе «Мои товары»</a></p>
     </div>
 </div>
 {% else %}
 
+<!-- STEP 1: Выбор товара -->
 <div class="card">
-    <div class="card-header"><span class="card-title">Параметры генерации</span></div>
+    <div class="card-header">
+        <span class="card-title">Шаг 1 — Выберите товар</span>
+    </div>
     <div class="card-body">
-        <form id="gen-form">
-
-            <!-- Выбор товара -->
-            <div class="form-group">
-                <label class="form-label">Ваш товар</label>
-                <select id="product_select" class="form-control" required>
-                    <option value="">— Выберите товар —</option>
-                    {% for p in products %}
-                    <option value="{{ p.id }}" data-article="{{ p.wb_article }}" data-name="{{ p.name }}">
-                        {{ p.name }} (арт. {{ p.wb_article }})
-                    </option>
-                    {% endfor %}
-                </select>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;">
+            <select id="product_select" class="form-control" style="font-size:15px;padding:12px 16px;">
+                <option value="">— Выберите товар —</option>
+                {% for p in products %}
+                <option value="{{ p.id }}"
+                        data-article="{{ p.wb_article }}"
+                        data-name="{{ p.name }}"
+                        {% if request.args.get('product_id') == p.id|string %}selected{% endif %}>
+                    {{ p.name }} (арт. {{ p.wb_article }})
+                </option>
+                {% endfor %}
+            </select>
+            <div id="product-cover-wrap" style="display:none;flex-shrink:0;">
+                <img id="product-cover-img" src=""
+                     style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:2px solid #374151;"
+                     onerror="this.style.opacity='0.2';">
             </div>
+        </div>
 
-            <!-- Превью фото с WB (загружается браузером напрямую) -->
-            <div id="photos-block" style="display:none;margin-bottom:20px;">
-                <label class="form-label">Фото товара на WB — выберите для генерации</label>
-                <div id="photos-grid" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"></div>
-                <div class="form-hint" style="margin-top:8px;">
-                    Нажмите на фото чтобы выбрать его. Или загрузите своё фото ниже для точной генерации с реальным товаром.
-                </div>
-            </div>
-
-            <!-- Ручная загрузка фото (для точной генерации через gpt-image-1) -->
-            <div id="upload-block" style="display:none;margin-bottom:20px;">
-                <label class="form-label">
-                    Загрузить фото товара вручную
-                    <span style="color:#8b5cf6;font-weight:600;"> — для точной генерации с реальным товаром</span>
-                </label>
-                <div id="photo-drop" style="border:2px dashed #374151;border-radius:12px;padding:20px;
-                     text-align:center;cursor:pointer;position:relative;transition:border-color 0.2s;">
-                    <input type="file" id="product_photo" accept="image/*"
-                           style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
-                    <div id="upload-placeholder">
-                        <div style="font-size:24px;margin-bottom:4px;">📷</div>
-                        <div style="color:#9ca3af;font-size:13px;">Перетащите или нажмите для выбора</div>
-                    </div>
-                    <img id="upload-preview" src="" style="display:none;max-height:160px;border-radius:8px;object-fit:contain;">
-                </div>
-                <div class="form-hint">Скачайте нужное фото с WB и загрузите сюда — ИИ сохранит упаковку точно.</div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">Ключевой запрос для анализа конкурентов</label>
-                    <input type="text" id="keyword" class="form-control"
-                           placeholder="Например: капсулы для похудения" required>
-                    <div class="form-hint">Найдём топ-обложки конкурентов по этому запросу на WB</div>
-                </div>
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">Дополнительные пожелания</label>
-                    <input type="text" id="extra_hint" class="form-control"
-                           placeholder="Например: зелёные цвета, акцент на -7 кг за 14 дней">
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary" id="gen-btn" disabled>
-                ✦ Анализировать и сгенерировать
-            </button>
-            <span id="no-product-hint" style="margin-left:12px;font-size:13px;color:#6b7280;">
-                Выберите товар для начала
-            </span>
-        </form>
+        <!-- Все фото товара -->
+        <div id="photos-block" style="display:none;margin-top:16px;">
+            <div class="form-hint" style="margin-bottom:8px;">Фото товара на WB — нажмите чтобы выбрать то, что использовать для генерации:</div>
+            <div id="photos-grid" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+        </div>
     </div>
 </div>
 
-<!-- Loader -->
-<div id="loader" style="display:none;text-align:center;padding:48px 0;">
-    <div class="loader-spinner"></div>
-    <p id="loader-text" style="margin-top:16px;color:#9ca3af;font-size:14px;">
-        Читаем текущую обложку с WB...
-    </p>
+<!-- STEP 2: Ключ + пожелания -->
+<div class="card" id="step2-card" style="display:none;">
+    <div class="card-header">
+        <span class="card-title">Шаг 2 — Настройте генерацию</span>
+    </div>
+    <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+            <div class="form-group" style="margin:0;">
+                <label class="form-label">Ключевой запрос для поиска конкурентов *</label>
+                <input type="text" id="keyword" class="form-control"
+                       placeholder="Например: таблетки для похудения жиросжигатель">
+                <div class="form-hint">ИИ найдёт топ-обложки по этому запросу на WB и проанализирует их</div>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label class="form-label">Дополнительные пожелания</label>
+                <input type="text" id="extra_hint" class="form-control"
+                       placeholder="Например: зелёные тона, акцент на -7 кг за 14 дней">
+                <div class="form-hint">Необязательно — ИИ сам определит лучший стиль из анализа</div>
+            </div>
+        </div>
+
+        <!-- Пайплайн — что будет происходить -->
+        <div style="background:#0d1117;border:1px solid #1f2937;border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Что сделает ИИ:</div>
+            <div style="display:flex;gap:0;flex-wrap:wrap;">
+                <div class="pipeline-step">
+                    <div class="pipeline-num">1</div>
+                    <div class="pipeline-text">Читает текущую обложку WB — запоминает текст, дозировку, УТП, визуал</div>
+                </div>
+                <div class="pipeline-arrow">→</div>
+                <div class="pipeline-step">
+                    <div class="pipeline-num">2</div>
+                    <div class="pipeline-text">Парсит топ конкурентов по вашему ключевому запросу</div>
+                </div>
+                <div class="pipeline-arrow">→</div>
+                <div class="pipeline-step">
+                    <div class="pipeline-num">3</div>
+                    <div class="pipeline-text">GPT-4o анализирует что делает обложки конкурентов кликабельными</div>
+                </div>
+                <div class="pipeline-arrow">→</div>
+                <div class="pipeline-step">
+                    <div class="pipeline-num">4</div>
+                    <div class="pipeline-text">Генерирует новую обложку — ваш продукт + ваш текст + лучшие элементы конкурентов</div>
+                </div>
+            </div>
+        </div>
+
+        <button id="gen-btn" class="btn btn-primary" style="width:100%;padding:14px;font-size:15px;">
+            ✦ Запустить анализ и генерацию
+        </button>
+    </div>
+</div>
+
+<!-- Loader с пошаговыми статусами -->
+<div id="loader" style="display:none;">
+    <div class="card">
+        <div class="card-body" style="padding:32px;text-align:center;">
+            <div class="loader-spinner" style="margin:0 auto 20px;"></div>
+            <div id="loader-title" style="font-size:16px;font-weight:600;color:#e5e7eb;margin-bottom:8px;">
+                Запускаем анализ...
+            </div>
+            <div id="loader-text" style="font-size:13px;color:#6b7280;"></div>
+            <div style="margin-top:24px;display:flex;flex-direction:column;gap:6px;" id="step-list">
+                <div class="step-item" id="s1">⏳ Читаем текущую обложку с WB</div>
+                <div class="step-item" id="s2" style="color:#374151;">○ Ищем конкурентов по ключевому запросу</div>
+                <div class="step-item" id="s3" style="color:#374151;">○ GPT-4o анализирует обложки</div>
+                <div class="step-item" id="s4" style="color:#374151;">○ Генерируем новую обложку</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Results -->
 <div id="results" style="display:none;">
 
-    <div id="cover-info-card" class="card" style="display:none;">
-        <div class="card-header">
-            <span class="card-title">Информация считана с текущей обложки WB</span>
-        </div>
-        <div class="card-body">
-            <div id="cover-info-text"
-                 style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:#e5e7eb;"></div>
-        </div>
-    </div>
-
+    <!-- Текущая обложка + что считали -->
     <div class="card">
-        <div class="card-header"><span class="card-title">Обложки конкурентов (топ WB)</span></div>
-        <div class="card-body">
-            <div id="competitors-grid"
-                 style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
+        <div class="card-header">
+            <span class="card-title">Анализ вашей текущей обложки</span>
+            <span style="font-size:12px;color:#6b7280;">считано автоматически с WB через GPT-4o</span>
+        </div>
+        <div class="card-body" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+            <img id="my-cover-big" src="" alt="Ваша обложка"
+                 style="width:160px;height:160px;object-fit:cover;border-radius:12px;border:2px solid #7c3aed;flex-shrink:0;"
+                 onerror="this.style.display='none'">
+            <div style="flex:1;min-width:240px;">
+                <div id="cover-info-text"
+                     style="white-space:pre-wrap;font-size:13px;line-height:1.8;color:#d1d5db;"></div>
             </div>
         </div>
     </div>
 
+    <!-- Конкуренты -->
     <div class="card">
-        <div class="card-header"><span class="card-title">Анализ конкурентов</span></div>
+        <div class="card-header">
+            <span class="card-title">Топ конкурентов на WB</span>
+        </div>
         <div class="card-body">
-            <div id="analysis-text"
-                 style="white-space:pre-wrap;font-size:14px;line-height:1.7;color:#e5e7eb;"></div>
+            <div id="competitors-grid"
+                 style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;">
+            </div>
         </div>
     </div>
 
+    <!-- Анализ -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Анализ конкурентов и промпт для генерации</span>
+        </div>
+        <div class="card-body">
+            <div id="analysis-text"
+                 style="white-space:pre-wrap;font-size:13px;line-height:1.8;color:#d1d5db;"></div>
+        </div>
+    </div>
+
+    <!-- Сгенерированная обложка -->
     <div class="card">
         <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-            <span class="card-title">Сгенерированная обложка</span>
+            <span class="card-title">Новая обложка</span>
             <div style="display:flex;gap:8px;">
                 <button id="regen-btn" class="btn btn-secondary btn-sm">↺ Перегенерировать</button>
                 <a id="download-btn" href="#" class="btn btn-primary btn-sm">↓ Скачать</a>
             </div>
         </div>
-        <div class="card-body" style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+        <div class="card-body" style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;">
             <div>
-                <img id="generated-img" src="" alt="Generated cover"
-                     style="width:320px;height:320px;object-fit:cover;border-radius:12px;border:1px solid #374151;">
-                <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
-                    <div id="badge-photo" style="display:none;background:#7c3aed20;border:1px solid #7c3aed;
-                         border-radius:6px;padding:5px 10px;font-size:12px;color:#a78bfa;text-align:center;">
-                        ✓ Использовано фото с WB
-                    </div>
-                    <div id="badge-cover" style="display:none;background:#065f4620;border:1px solid #059669;
-                         border-radius:6px;padding:5px 10px;font-size:12px;color:#34d399;text-align:center;">
-                        ✓ Информация перенесена с текущей обложки WB
+                <img id="generated-img" src="" alt="Сгенерированная обложка"
+                     style="width:360px;height:360px;object-fit:cover;border-radius:14px;border:2px solid #374151;">
+                <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+                    <div id="badge-cover" style="display:none;background:#065f4615;border:1px solid #059669;
+                         border-radius:6px;padding:5px 12px;font-size:12px;color:#34d399;text-align:center;">
+                        ✓ Текст и данные перенесены с вашей текущей обложки WB
                     </div>
                 </div>
             </div>
-            <div style="flex:1;min-width:240px;">
-                <p style="font-size:13px;color:#9ca3af;margin-bottom:8px;">Промпт генерации:</p>
+            <div style="flex:1;min-width:200px;">
+                <p style="font-size:12px;color:#6b7280;margin-bottom:6px;">Промпт который использовал ИИ:</p>
                 <div id="dalle-prompt"
-                     style="font-size:12px;color:#6b7280;background:#111827;padding:12px;
+                     style="font-size:11px;color:#6b7280;background:#0d1117;padding:12px;
                             border-radius:8px;white-space:pre-wrap;line-height:1.6;
-                            max-height:280px;overflow-y:auto;"></div>
+                            max-height:320px;overflow-y:auto;border:1px solid #1f2937;"></div>
             </div>
         </div>
+    </div>
+
+    <div style="text-align:center;margin:8px 0 16px;">
+        <button id="regen-btn2" class="btn btn-secondary">↺ Перегенерировать с тем же анализом</button>
     </div>
 </div>
 
@@ -165,214 +206,226 @@
 
 {% block scripts %}
 <style>
-.loader-spinner {
-    width:40px;height:40px;border:3px solid #374151;
-    border-top-color:#8b5cf6;border-radius:50%;
-    animation:spin 0.8s linear infinite;margin:0 auto;
-}
+.loader-spinner{width:44px;height:44px;border:3px solid #1f2937;border-top-color:#8b5cf6;border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.competitor-thumb{border-radius:8px;overflow:hidden;background:#1f2937;border:1px solid #374151;}
-.competitor-thumb img{width:100%;aspect-ratio:1;object-fit:cover;display:block;}
-.competitor-thumb .thumb-name{font-size:11px;color:#9ca3af;padding:6px 8px;
-    line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.wb-photo-thumb {
-    width:100px;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;
-    border:3px solid transparent;transition:border-color 0.15s,transform 0.15s;
-}
-.wb-photo-thumb:hover{transform:scale(1.04);}
+
+.wb-photo-thumb{width:88px;height:88px;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid transparent;transition:border-color 0.15s,transform 0.15s;}
+.wb-photo-thumb:hover{transform:scale(1.05);}
 .wb-photo-thumb.selected{border-color:#8b5cf6;}
+
+.competitor-thumb{border-radius:10px;overflow:hidden;background:#111827;border:1px solid #1f2937;}
+.competitor-thumb img{width:100%;aspect-ratio:1;object-fit:cover;display:block;}
+.competitor-thumb .thumb-name{font-size:11px;color:#9ca3af;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+.pipeline-step{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;flex:1;min-width:180px;}
+.pipeline-num{width:22px;height:22px;border-radius:50%;background:#7c3aed;color:white;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.pipeline-text{font-size:12px;color:#9ca3af;line-height:1.5;}
+.pipeline-arrow{display:flex;align-items:center;color:#374151;font-size:18px;padding:8px 0;}
+
+.step-item{font-size:13px;color:#6b7280;padding:4px 0;transition:color 0.3s;}
+.step-item.done{color:#34d399;}
+.step-item.active{color:#a78bfa;font-weight:600;}
+
 .btn-sm{padding:6px 14px;font-size:13px;}
 </style>
+
 <script>
 let selectedPhotoNumber = 1;
 let selectedProductId = null;
 let selectedArticle = null;
+let selectedProductName = null;
 let lastPrompt = '';
-let manualPhotoFile = null;
+let currentCoverUrl = '';
 
 const productSelect = document.getElementById('product_select');
-const genBtn = document.getElementById('gen-btn');
-const noHint = document.getElementById('no-product-hint');
-
-// Manual photo upload
-const photoInput = document.getElementById('product_photo');
-const photoDrop = document.getElementById('photo-drop');
-photoInput && photoInput.addEventListener('change', () => {
-    if (photoInput.files[0]) showUploadPreview(photoInput.files[0]);
-});
-photoDrop && photoDrop.addEventListener('dragover', e => { e.preventDefault(); photoDrop.style.borderColor='#8b5cf6'; });
-photoDrop && photoDrop.addEventListener('dragleave', () => { photoDrop.style.borderColor='#374151'; });
-photoDrop && photoDrop.addEventListener('drop', e => {
-    e.preventDefault(); photoDrop.style.borderColor='#374151';
-    if (e.dataTransfer.files[0]) showUploadPreview(e.dataTransfer.files[0]);
-});
-
-function showUploadPreview(file) {
-    manualPhotoFile = file;
-    const reader = new FileReader();
-    reader.onload = e => {
-        document.getElementById('upload-preview').src = e.target.result;
-        document.getElementById('upload-preview').style.display = 'block';
-        document.getElementById('upload-placeholder').style.display = 'none';
-    };
-    reader.readAsDataURL(file);
-}
 
 productSelect && productSelect.addEventListener('change', function() {
     const opt = this.options[this.selectedIndex];
     selectedProductId = opt.value;
     selectedArticle = opt.dataset.article;
+    selectedProductName = opt.dataset.name;
 
     if (!selectedProductId) {
-        genBtn.disabled = true;
-        noHint.style.display = '';
+        document.getElementById('product-cover-wrap').style.display = 'none';
         document.getElementById('photos-block').style.display = 'none';
-        document.getElementById('upload-block').style.display = 'none';
+        document.getElementById('step2-card').style.display = 'none';
         return;
     }
 
-    genBtn.disabled = false;
-    noHint.style.display = 'none';
+    // Show current cover preview
+    currentCoverUrl = `/api/wb/product-photos/${selectedArticle}`;
+    const coverImg = document.getElementById('product-cover-img');
+    coverImg.src = wbPhotoUrl(selectedArticle, 1);
+    document.getElementById('product-cover-wrap').style.display = 'block';
+    document.getElementById('step2-card').style.display = 'block';
+
     loadProductPhotos(selectedArticle);
 });
+
+function wbPhotoUrl(article, num) {
+    // Compute WB CDN URL in JS (mirrors Python formula)
+    const nm = parseInt(article);
+    const vol = Math.floor(nm / 100000);
+    const part = Math.floor(nm / 1000);
+    const basket = calcBasket(vol);
+    return `https://basket-${basket}.wbbasket.ru/vol${vol}/part${part}/${nm}/images/big/${num}.jpg`;
+}
+
+function calcBasket(vol) {
+    const fixed = [
+        [143,1],[287,2],[431,3],[719,4],[1007,5],[1061,6],[1115,7],[1169,8],
+        [1313,9],[1601,10],[1655,11],[1919,12],[2045,13],[2189,14],[2405,15],[2621,16],[2837,17]
+    ];
+    for (const [thr, b] of fixed) { if (vol <= thr) return String(b).padStart(2,'0'); }
+    return String(18 + Math.floor((vol - 2838) / 216)).padStart(2,'0');
+}
 
 async function loadProductPhotos(article) {
     const block = document.getElementById('photos-block');
     const grid = document.getElementById('photos-grid');
-    const uploadBlock = document.getElementById('upload-block');
     block.style.display = 'block';
     grid.innerHTML = '<span style="color:#9ca3af;font-size:13px;">Загружаем...</span>';
     selectedPhotoNumber = 1;
 
-    try {
-        const resp = await fetch(`/api/wb/product-photos/${article}`);
-        const data = await resp.json();
-        grid.innerHTML = '';
-
-        if (!data.photos || data.photos.length === 0) {
-            grid.innerHTML = '<span style="color:#f87171;font-size:13px;">Фото не найдены на WB</span>';
-            uploadBlock.style.display = 'block';
-            return;
-        }
-
-        // Show WB photos — browser fetches them directly (works, VPS can't but browser can)
-        data.photos.forEach((p, idx) => {
-            const img = document.createElement('img');
-            img.className = 'wb-photo-thumb' + (idx === 0 ? ' selected' : '');
-            img.title = `Фото ${p.number}`;
-            img.dataset.number = p.number;
-            img.dataset.url = p.url;
-            img.src = p.url;
-            img.onerror = () => img.closest('.wb-photo-wrap')?.remove();
-            img.addEventListener('click', () => {
-                document.querySelectorAll('.wb-photo-thumb').forEach(i => i.classList.remove('selected'));
-                img.classList.add('selected');
-                selectedPhotoNumber = p.number;
-            });
-            grid.appendChild(img);
+    // Build photo URLs directly (WB CDN formula) — no API call needed
+    grid.innerHTML = '';
+    for (let i = 1; i <= 8; i++) {
+        const url = wbPhotoUrl(article, i);
+        const img = document.createElement('img');
+        img.className = 'wb-photo-thumb' + (i === 1 ? ' selected' : '');
+        img.title = `Фото ${i}`;
+        img.dataset.number = i;
+        img.src = url;
+        img.onerror = () => img.remove();
+        img.addEventListener('click', () => {
+            document.querySelectorAll('.wb-photo-thumb').forEach(x => x.classList.remove('selected'));
+            img.classList.add('selected');
+            selectedPhotoNumber = i;
         });
-
-        // Always show manual upload option below
-        uploadBlock.style.display = 'block';
-    } catch(e) {
-        grid.innerHTML = '<span style="color:#f87171;font-size:13px;">Ошибка загрузки фото</span>';
-        uploadBlock.style.display = 'block';
+        grid.appendChild(img);
     }
 }
 
-document.getElementById('gen-form') && document.getElementById('gen-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    await runGeneration(null);
+// Auto-select from URL param
+window.addEventListener('DOMContentLoaded', () => {
+    if (productSelect && productSelect.value) {
+        productSelect.dispatchEvent(new Event('change'));
+    }
 });
 
-document.getElementById('regen-btn') && document.getElementById('regen-btn').addEventListener('click', async () => {
-    await runGeneration(lastPrompt);
-});
+document.getElementById('gen-btn') && document.getElementById('gen-btn').addEventListener('click', () => runGeneration(null));
+document.getElementById('regen-btn') && document.getElementById('regen-btn').addEventListener('click', () => runGeneration(lastPrompt));
+document.getElementById('regen-btn2') && document.getElementById('regen-btn2').addEventListener('click', () => runGeneration(lastPrompt));
+
+function setStep(n) {
+    for (let i = 1; i <= 4; i++) {
+        const el = document.getElementById('s' + i);
+        if (!el) continue;
+        if (i < n) { el.className = 'step-item done'; el.textContent = '✓ ' + el.textContent.replace(/^[✓⏳○]\s*/, ''); }
+        else if (i === n) { el.className = 'step-item active'; el.textContent = '⏳ ' + el.textContent.replace(/^[✓⏳○]\s*/, ''); }
+        else { el.className = 'step-item'; el.textContent = '○ ' + el.textContent.replace(/^[✓⏳○]\s*/, ''); }
+    }
+}
+
+const STEP_LABELS = [
+    'Читаем текущую обложку с WB',
+    'Ищем конкурентов по ключевому запросу',
+    'GPT-4o анализирует обложки',
+    'Генерируем новую обложку'
+];
 
 async function runGeneration(customPrompt) {
     const keyword = document.getElementById('keyword').value.trim();
-    const extraHint = document.getElementById('extra_hint').value.trim();
-    if (!keyword || !selectedProductId) return;
+    if (!keyword || !selectedProductId) {
+        alert('Выберите товар и введите ключевой запрос');
+        return;
+    }
+
+    // Reset step labels
+    for (let i = 1; i <= 4; i++) {
+        const el = document.getElementById('s' + i);
+        if (el) el.textContent = '○ ' + STEP_LABELS[i-1];
+    }
 
     document.getElementById('loader').style.display = 'block';
     document.getElementById('results').style.display = 'none';
     document.getElementById('error-block').style.display = 'none';
-    genBtn.disabled = true;
+    document.getElementById('gen-btn').disabled = true;
+    setStep(1);
 
-    const steps = [
-        'Читаем текущую обложку с WB...',
-        'Ищем топ конкурентов по запросу...',
-        'GPT-4o анализирует обложки...',
-        'Генерируем новую обложку с вашим товаром...',
-    ];
-    let stepIdx = 0;
-    const loaderText = document.getElementById('loader-text');
-    const timer = setInterval(() => {
-        if (stepIdx < steps.length - 1) stepIdx++;
-        loaderText.textContent = steps[stepIdx];
-    }, 8000);
+    const stepTimer = setInterval(() => {
+        const activeEl = document.querySelector('.step-item.active');
+        if (activeEl) {
+            const idx = parseInt(activeEl.id.replace('s',''));
+            if (idx < 4) setStep(idx + 1);
+        }
+    }, 10000);
 
     try {
         const fd = new FormData();
         fd.append('product_id', selectedProductId);
         fd.append('photo_number', selectedPhotoNumber);
         fd.append('keyword', keyword);
-        fd.append('extra_hint', extraHint);
+        fd.append('extra_hint', document.getElementById('extra_hint').value.trim());
         fd.append('custom_prompt', customPrompt || '');
-        if (manualPhotoFile) fd.append('product_photo', manualPhotoFile);
 
         const resp = await fetch('/api/covers/generate', { method: 'POST', body: fd });
-        clearInterval(timer);
+        clearInterval(stepTimer);
+        setStep(5); // all done
         const data = await resp.json();
         if (!resp.ok || data.error) { showError(data.error || 'Ошибка генерации'); return; }
         renderResults(data);
     } catch(err) {
-        clearInterval(timer);
+        clearInterval(stepTimer);
         showError('Ошибка соединения: ' + err.message);
     } finally {
         document.getElementById('loader').style.display = 'none';
-        genBtn.disabled = false;
+        document.getElementById('gen-btn').disabled = false;
     }
 }
 
 function renderResults(data) {
+    // My cover
+    const myCoverSrc = wbPhotoUrl(selectedArticle, 1);
+    document.getElementById('my-cover-big').src = myCoverSrc;
+
     if (data.cover_info) {
         document.getElementById('cover-info-text').textContent = data.cover_info;
-        document.getElementById('cover-info-card').style.display = 'block';
+    } else {
+        document.getElementById('cover-info-text').textContent = 'Не удалось прочитать обложку (WB недоступен с сервера). Генерация продолжена без анализа текущей обложки.';
     }
 
+    // Competitors
     const grid = document.getElementById('competitors-grid');
     grid.innerHTML = '';
     (data.covers || []).forEach(c => {
         const div = document.createElement('div');
         div.className = 'competitor-thumb';
         div.innerHTML = `
-            <a href="${c.url}" target="_blank">
-                <img src="${c.url}" alt="${c.name}" loading="lazy"
-                     onerror="this.closest('.competitor-thumb').remove()">
-            </a>
+            <img src="${c.url}" alt="${c.name}" loading="lazy"
+                 onerror="this.closest('.competitor-thumb').remove()">
             <div class="thumb-name" title="${c.name}">${c.name || 'Товар WB'}</div>`;
         grid.appendChild(div);
     });
 
     document.getElementById('analysis-text').textContent = data.analysis || '';
 
+    // Generated
     const img = document.getElementById('generated-img');
     img.src = data.generated_url;
 
     const dlBtn = document.getElementById('download-btn');
-    if (data.generated_url.startsWith('data:')) {
+    if (data.generated_url && data.generated_url.startsWith('data:')) {
         dlBtn.href = data.generated_url;
-        dlBtn.download = 'cover.png';
+        dlBtn.download = 'wb-cover.png';
     } else {
-        dlBtn.href = data.generated_url;
+        dlBtn.href = data.generated_url || '#';
         dlBtn.target = '_blank';
         dlBtn.removeAttribute('download');
     }
 
     lastPrompt = data.dalle_prompt || '';
     document.getElementById('dalle-prompt').textContent = lastPrompt;
-    document.getElementById('badge-photo').style.display = data.used_product_photo ? 'block' : 'none';
     document.getElementById('badge-cover').style.display = data.used_current_cover ? 'block' : 'none';
 
     document.getElementById('results').style.display = 'block';
@@ -383,6 +436,7 @@ function showError(msg) {
     const el = document.getElementById('error-block');
     el.textContent = msg;
     el.style.display = 'block';
+    document.getElementById('loader').style.display = 'none';
     el.scrollIntoView({ behavior: 'smooth' });
 }
 </script>

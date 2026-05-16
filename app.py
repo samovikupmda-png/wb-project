@@ -15,6 +15,10 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 db.init_app(app)
 
+# Make WB cover URL available in all templates
+from modules.cover_gen import _wb_image_url as _wb_url
+app.jinja_env.globals['wb_cover_url'] = lambda article: _wb_url(int(article), photo_number=1)
+
 with app.app_context():
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
     os.makedirs(os.path.join(BASE_DIR, 'static', 'uploads'), exist_ok=True)
