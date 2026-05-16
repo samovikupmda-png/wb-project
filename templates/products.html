@@ -26,12 +26,10 @@
     {% for p in products %}
     <div class="card" style="margin:0;">
         <div style="position:relative;background:#111827;border-radius:12px 12px 0 0;overflow:hidden;aspect-ratio:1;">
-            <img src="{{ wb_cover_url(p.wb_article) }}"
+            <img src="/img/{{ p.wb_article }}"
                  alt="{{ p.name }}"
-                 referrerpolicy="no-referrer"
-                 crossorigin="anonymous"
                  style="width:100%;height:100%;object-fit:cover;display:block;"
-                 onerror="if(!this.dataset.tried){this.dataset.tried=1;this.src=this.src.replace('.webp','.jpg')}else{this.style.display='none';this.nextElementSibling.style.display='flex';}">
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
             <div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;
                         color:#4b5563;font-size:40px;position:absolute;top:0;left:0;">◻</div>
             <div style="position:absolute;top:8px;right:8px;">

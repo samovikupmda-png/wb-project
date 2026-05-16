@@ -18,6 +18,7 @@ class Product(db.Model):
     wb_article = db.Column(db.String(64), unique=True, nullable=False)
     name = db.Column(db.String(256), nullable=False)
     category = db.Column(db.String(128), default='')
+    photo_url = db.Column(db.String(512), default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     ab_tests = db.relationship('ABTest', backref='product', lazy=True)
 

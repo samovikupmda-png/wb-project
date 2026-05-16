@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, Response
 from modules.database import db, Settings, Product, ABTest, ABVariant
 from modules import ab_test as ab_module
 import os
@@ -42,6 +42,7 @@ with app.app_context():
             'ALTER TABLE settings ADD COLUMN wb_content_client_secret VARCHAR(256) DEFAULT ""',
             'ALTER TABLE settings ADD COLUMN wb_analytics_api_key VARCHAR(256) DEFAULT ""',
             'ALTER TABLE settings ADD COLUMN wb_content_api_key VARCHAR(256) DEFAULT ""',
+            'ALTER TABLE product ADD COLUMN photo_url VARCHAR(512) DEFAULT ""',
         ]:
             try:
                 conn.execute(text(sql))
@@ -69,6 +70,20 @@ def dashboard():
 
 
 # ── Товары ───────────────────────────────────────────────────────────────────
+
+@app.route('/img/<article>')
+@app.route('/img/<article>/<int:num>')
+def product_image_redirect(article, num=1):
+    """Redirect to WB CDN via server — browser follows redirect without sending our Referer to WB."""
+    p = Product.query.filter_by(wb_article=str(article)).first()
+    if num == 1 and p and p.photo_url:
+        url = p.photo_url
+    else:
+        url = _wb_cover_url(article, num)
+    resp = redirect(url, 302)
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
+
 
 @app.route('/products')
 def products():
@@ -124,11 +139,22 @@ def _sync_wb_products(api_key):
                 nm_id = str(card.get('nmID', ''))
                 if not nm_id:
                     continue
-                if not Product.query.filter_by(wb_article=nm_id).first():
+                # Extract first photo URL from API response
+                media = card.get('mediaFiles') or []
+                photo_url = media[0] if media else ''
+                if not photo_url:
+                    photos = card.get('photos') or []
+                    if photos:
+                        p0 = photos[0]
+                        photo_url = p0.get('big') or p0.get('c516x688') or (p0 if isinstance(p0, str) else '')
+                existing = Product.query.filter_by(wb_article=nm_id).first()
+                if not existing:
                     name = card.get('title', '') or card.get('subjectName', '') or f'Товар {nm_id}'
                     category = card.get('subjectName', '')
-                    db.session.add(Product(wb_article=nm_id, name=name, category=category))
+                    db.session.add(Product(wb_article=nm_id, name=name, category=category, photo_url=photo_url))
                     added += 1
+                elif photo_url and not existing.photo_url:
+                    existing.photo_url = photo_url
             db.session.commit()
             next_cursor = data.get('cursor', {})
             if not next_cursor.get('nmID') or len(cards) < 100:

@@ -36,9 +36,8 @@
             </select>
             <div id="product-cover-wrap" style="display:none;flex-shrink:0;">
                 <img id="product-cover-img" src=""
-                     referrerpolicy="no-referrer"
                      style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:2px solid #374151;"
-                     onerror="if(!this.dataset.t){this.dataset.t=1;this.src=this.src.replace('.webp','.jpg')}else{this.style.opacity='0.15';}">
+                     onerror="this.style.opacity='0.1';">
             </div>
         </div>
 
@@ -133,9 +132,8 @@
         </div>
         <div class="card-body" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
             <img id="my-cover-big" src="" alt="Ваша обложка"
-                 referrerpolicy="no-referrer"
                  style="width:160px;height:160px;object-fit:cover;border-radius:12px;border:2px solid #7c3aed;flex-shrink:0;"
-                 onerror="if(!this.dataset.t){this.dataset.t=1;this.src=this.src.replace('.webp','.jpg')}else{this.style.display='none';}">
+                 onerror="this.style.display='none';">
             <div style="flex:1;min-width:240px;">
                 <div id="cover-info-text"
                      style="white-space:pre-wrap;font-size:13px;line-height:1.8;color:#d1d5db;"></div>
@@ -257,7 +255,7 @@ productSelect && productSelect.addEventListener('change', function() {
     // Show current cover preview
     currentCoverUrl = `/api/wb/product-photos/${selectedArticle}`;
     const coverImg = document.getElementById('product-cover-img');
-    coverImg.src = wbPhotoUrl(selectedArticle, 1);
+    coverImg.src = `/img/${selectedArticle}`;
     document.getElementById('product-cover-wrap').style.display = 'block';
     document.getElementById('step2-card').style.display = 'block';
 
@@ -289,20 +287,14 @@ async function loadProductPhotos(article) {
     grid.innerHTML = '<span style="color:#9ca3af;font-size:13px;">Загружаем...</span>';
     selectedPhotoNumber = 1;
 
-    // Build photo URLs directly (WB CDN formula) — no API call needed
     grid.innerHTML = '';
     for (let i = 1; i <= 8; i++) {
-        const url = wbPhotoUrl(article, i);
         const img = document.createElement('img');
         img.className = 'wb-photo-thumb' + (i === 1 ? ' selected' : '');
         img.title = `Фото ${i}`;
         img.dataset.number = i;
-        img.referrerPolicy = 'no-referrer';
-        img.src = url;
-        img.onerror = () => {
-            if (!img.dataset.t) { img.dataset.t = 1; img.src = url.replace('.webp', '.jpg'); }
-            else img.remove();
-        };
+        img.src = `/img/${article}/${i}`;
+        img.onerror = () => img.remove();
         img.addEventListener('click', () => {
             document.querySelectorAll('.wb-photo-thumb').forEach(x => x.classList.remove('selected'));
             img.classList.add('selected');
@@ -391,9 +383,7 @@ async function runGeneration(customPrompt) {
 }
 
 function renderResults(data) {
-    // My cover
-    const myCoverSrc = wbPhotoUrl(selectedArticle, 1);
-    document.getElementById('my-cover-big').src = myCoverSrc;
+    document.getElementById('my-cover-big').src = `/img/${selectedArticle}`;
 
     if (data.cover_info) {
         document.getElementById('cover-info-text').textContent = data.cover_info;
