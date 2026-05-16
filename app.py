@@ -437,7 +437,11 @@ def api_test_openai():
 
 @app.route('/api/covers/analyze', methods=['POST'])
 def api_covers_analyze():
-    """Step 1-3: get product info + competitor names + build prompt. No WB CDN URLs to OpenAI."""
+    """
+    Step 1-3: product info (WB API) + competitor search + GPT-4o analysis.
+    Tries visual analysis of competitor images first (20s timeout, 0 retries).
+    Falls back instantly to enhanced text-only if images are blocked.
+    """
     s = Settings.query.first()
     if not s or not s.image_ai_api_key:
         return jsonify({'error': 'API-ключ OpenAI не настроен'}), 400
@@ -449,74 +453,108 @@ def api_covers_analyze():
         return jsonify({'error': 'Укажите товар и ключевой запрос'}), 400
 
     product = Product.query.get_or_404(product_id)
+    from openai import OpenAI
 
-    # Step 1: get product info from WB Content API (text only, no CDN)
+    # ── Step 1: Product info from WB Content API (text, always works) ──
     wb_key = (s.wb_content_api_key or s.wb_stats_api_key or '').strip()
     card_info = _get_wb_card_info(wb_key, product.wb_article)
     cover_info = card_info or f'Товар: {product.name} (арт. {product.wb_article})'
 
-    # Step 2: get competitor names from WB search (text, no images to OpenAI)
+    # ── Step 2: Competitor covers from WB search ──
     covers = []
-    competitor_names = []
     try:
         from modules import cover_gen
         covers = cover_gen.search_wb_covers(keyword, limit=8)
-        competitor_names = [f"{c['brand']} — {c['name']}" for c in covers[:6] if c.get('name')]
     except Exception:
         covers = []
 
-    # Step 3: build prompt with GPT-4o (text only — fast and reliable)
-    hint_line = f'\nДополнительные пожелания: {extra_hint}' if extra_hint else ''
-    competitors_block = '\n'.join(competitor_names) if competitor_names else 'данные не получены'
+    # ── Step 3a: Try VISUAL analysis of competitor images (20s, no retry) ──
+    visual_insight = ''
+    if covers:
+        try:
+            client_fast = OpenAI(api_key=s.image_ai_api_key, timeout=20.0, max_retries=0)
+            img_content = [
+                {'type': 'image_url', 'image_url': {'url': c['url'], 'detail': 'low'}}
+                for c in covers[:4]
+            ]
+            vis_resp = client_fast.chat.completions.create(
+                model='gpt-4o',
+                messages=[{'role': 'user', 'content': [
+                    {'type': 'text', 'text': (
+                        f'Ты маркетолог-аналитик Wildberries. Проанализируй эти обложки товаров из ниши "{keyword}".\n'
+                        'Опиши КОНКРЕТНО:\n'
+                        '1. ЦВЕТА — какие цвета доминируют на фоне, на продукте, в тексте\n'
+                        '2. ФОНЫ — однотонный/градиент/текстура/сцена, цвета\n'
+                        '3. ТЕКСТ — что написано на обложках, какие УТП, цифры, claims\n'
+                        '4. КОМПОЗИЦИЯ — где стоит товар, как расположены элементы\n'
+                        '5. ЧТО ВЫДЕЛЯЕТ лучшие обложки среди остальных\n'
+                        'Ответ: 5-7 конкретных пунктов с деталями.'
+                    )},
+                ] + img_content}],
+                max_tokens=500,
+            )
+            visual_insight = vis_resp.choices[0].message.content
+        except Exception:
+            visual_insight = ''  # silently fall back to text-only
 
-    prompt_text = f"""Ты эксперт по визуальному маркетингу на Wildberries.
+    # ── Step 3b: Build final prompt with GPT-4o (text + optional visual insight) ──
+    hint_line = f'\nДополнительные пожелания от продавца: {extra_hint}' if extra_hint else ''
+    competitor_names = '\n'.join(
+        f"• {c['brand']} — {c['name']}" for c in covers[:6] if c.get('name')
+    ) or 'не получены'
+
+    visual_block = (
+        f'\n\nВИЗУАЛЬНЫЙ АНАЛИЗ ОБЛОЖЕК КОНКУРЕНТОВ (детальный):\n{visual_insight}\n'
+    ) if visual_insight else (
+        f'\n\nКонкуренты в нише (названия):\n{competitor_names}\n'
+        'Визуальный анализ: используй свои знания об эффективных обложках в этой нише.\n'
+    )
+
+    final_prompt = f"""Ты эксперт по визуальному маркетингу на Wildberries.
 
 Ниша: "{keyword}"
 Мой товар: {product.name}
-Информация о товаре из кабинета WB:
+
+ИНФОРМАЦИЯ О ТОВАРЕ (из кабинета WB — используй эти данные для текста на обложке):
 {cover_info}
 {hint_line}
+{visual_block}
+Создай детальный промпт для DALL-E 3 для новой конкурентоспособной обложки.
 
-Топ конкурентов в нише (название и бренд):
-{competitors_block}
+Промпт ДОЛЖЕН включать:
+- Конкретные цвета фона и акцентов (лучшие из анализа ниши)
+- Расположение и подачу товара в кадре
+- Точные тексты на обложке: название, количество, состав, УТП из данных товара выше
+- Стиль шрифтов и бейджей
+- Почему эта обложка будет кликабельнее конкурентов
 
-Твоя задача — создать детальный промпт для DALL-E 3 для генерации обложки товара WB.
-
-Промпт должен описывать:
-1. Визуальный стиль (фон, цвета, атмосфера)
-2. Расположение товара в кадре
-3. Текстовые бейджи и надписи — используй реальные данные товара (количество, состав, УТП)
-4. Элементы которые делают обложку кликабельной в нише
-
-Формат ответа:
+Формат:
 АНАЛИЗ НИШИ:
-[3-4 инсайта о том что работает в данной нише]
+[3-5 конкретных инсайтов — цвета, паттерны, что работает]
 
 ПРОМПТ ДЛЯ DALLE:
-[Детальный промпт на английском, 150-250 слов, с конкретными текстами с обложки]"""
+[Детальный промпт на английском, 200-300 слов]"""
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=s.image_ai_api_key, timeout=60.0)
+        client = OpenAI(api_key=s.image_ai_api_key, timeout=60.0, max_retries=1)
         resp = client.chat.completions.create(
             model='gpt-4o',
-            messages=[{'role': 'user', 'content': prompt_text}],
-            max_tokens=800,
+            messages=[{'role': 'user', 'content': final_prompt}],
+            max_tokens=900,
         )
         analysis_text = resp.choices[0].message.content
     except Exception as e:
         return jsonify({'error': f'OpenAI ошибка: {str(e)}'}), 500
 
     dalle_prompt = ''
-    if 'ПРОМПТ ДЛЯ DALLE:' in analysis_text:
-        dalle_prompt = analysis_text.split('ПРОМПТ ДЛЯ DALLE:')[-1].strip()
-    elif 'ПРОМПТ:' in analysis_text:
-        dalle_prompt = analysis_text.split('ПРОМПТ:')[-1].strip()
+    for marker in ['ПРОМПТ ДЛЯ DALLE:', 'ПРОМПТ:']:
+        if marker in analysis_text:
+            dalle_prompt = analysis_text.split(marker)[-1].strip()
+            break
     if not dalle_prompt:
         dalle_prompt = (
             f'Professional Wildberries marketplace product cover for {product.name}. '
-            f'Category: {keyword}. Eye-catching design, bold text badges with product benefits, '
-            f'studio lighting, clean background, photorealistic.'
+            f'Category: {keyword}. High CTR design, bold text badges, studio lighting, photorealistic.'
         )
 
     return jsonify({
@@ -525,6 +563,7 @@ def api_covers_analyze():
         'analysis': analysis_text,
         'dalle_prompt': dalle_prompt,
         'used_current_cover': bool(card_info),
+        'visual_analysis_done': bool(visual_insight),
     })
 
 

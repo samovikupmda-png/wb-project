@@ -133,8 +133,8 @@
     <!-- Текущая обложка + что считали -->
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Анализ вашей текущей обложки</span>
-            <span style="font-size:12px;color:#6b7280;">считано автоматически с WB через GPT-4o</span>
+            <span class="card-title">Информация о вашем товаре</span>
+            <span id="cover-source-badge" style="font-size:12px;color:#6b7280;"></span>
         </div>
         <div class="card-body" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
             <img id="my-cover-big" src="" alt="Ваша обложка"
@@ -448,6 +448,10 @@ function renderAnalysis(data) {
     lastPrompt = data.dalle_prompt || '';
     document.getElementById('dalle-prompt').textContent = lastPrompt;
     document.getElementById('badge-cover').style.display = data.used_current_cover ? 'block' : 'none';
+    const badge = document.getElementById('cover-source-badge');
+    if (badge) badge.textContent = data.visual_analysis_done
+        ? '✓ визуальный анализ обложек конкурентов выполнен'
+        : '⚠ визуальный анализ недоступен (WB CDN заблокирован) — использован текстовый';
 
     // Show results section (without image yet)
     document.getElementById('results').style.display = 'block';
