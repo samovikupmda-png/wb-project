@@ -99,6 +99,12 @@
         <button id="gen-btn" class="btn btn-primary" style="width:100%;padding:14px;font-size:15px;">
             ✦ Запустить анализ и генерацию
         </button>
+        <div style="margin-top:10px;text-align:center;">
+            <button onclick="testOpenAI()" class="btn btn-secondary btn-sm" style="font-size:12px;">
+                🔑 Проверить OpenAI ключ
+            </button>
+            <span id="openai-status" style="margin-left:10px;font-size:12px;"></span>
+        </div>
     </div>
 </div>
 
@@ -472,6 +478,26 @@ function showError(msg) {
     el.style.display = 'block';
     document.getElementById('loader').style.display = 'none';
     el.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function testOpenAI() {
+    const st = document.getElementById('openai-status');
+    st.textContent = 'Проверяем...';
+    st.style.color = '#9ca3af';
+    try {
+        const r = await fetch('/api/covers/test-openai');
+        const d = await r.json();
+        if (d.ok) {
+            st.textContent = '✓ OpenAI работает';
+            st.style.color = '#34d399';
+        } else {
+            st.textContent = '✗ ' + d.error;
+            st.style.color = '#f87171';
+        }
+    } catch(e) {
+        st.textContent = '✗ Ошибка: ' + e.message;
+        st.style.color = '#f87171';
+    }
 }
 </script>
 {% endblock %}

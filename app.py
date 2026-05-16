@@ -384,9 +384,60 @@ def api_wb_diagnose():
     return jsonify(result)
 
 
+def _get_wb_card_info(api_key, article):
+    """Get product characteristics from WB Content API as text."""
+    if not api_key:
+        return ''
+    token = api_key.strip()
+    if not token.lower().startswith('bearer '):
+        token = f'Bearer {token}'
+    try:
+        body = {'settings': {'cursor': {'limit': 1}, 'filter': {'textSearch': str(article)}}}
+        r = requests.post(
+            'https://content-api.wildberries.ru/content/v2/get/cards/list',
+            json=body, headers={'Authorization': token, 'Content-Type': 'application/json'},
+            timeout=10
+        )
+        if r.status_code != 200:
+            return ''
+        cards = r.json().get('cards', [])
+        if not cards:
+            return ''
+        card = cards[0]
+        parts = []
+        if card.get('title'):
+            parts.append(f"Название: {card['title']}")
+        if card.get('description'):
+            parts.append(f"Описание: {card['description'][:400]}")
+        for ch in (card.get('characteristics') or [])[:12]:
+            if isinstance(ch, dict):
+                name = ch.get('name', '')
+                vals = ch.get('value', ch.get('values', ''))
+                if name and vals:
+                    parts.append(f"- {name}: {vals}")
+        return '\n'.join(parts)
+    except Exception:
+        return ''
+
+
+@app.route('/api/covers/test-openai')
+def api_test_openai():
+    """Quick check that OpenAI key works."""
+    s = Settings.query.first()
+    if not s or not s.image_ai_api_key:
+        return jsonify({'ok': False, 'error': 'Ключ OpenAI не настроен в Настройках'})
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=s.image_ai_api_key, timeout=15.0)
+        models = client.models.list()
+        return jsonify({'ok': True, 'models_count': len(list(models))})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+
 @app.route('/api/covers/analyze', methods=['POST'])
 def api_covers_analyze():
-    """Step 1: analyze my cover + get + analyze competitors. ~30-60s."""
+    """Step 1-3: get product info + competitor names + build prompt. No WB CDN URLs to OpenAI."""
     s = Settings.query.first()
     if not s or not s.image_ai_api_key:
         return jsonify({'error': 'API-ключ OpenAI не настроен'}), 400
@@ -399,80 +450,83 @@ def api_covers_analyze():
 
     product = Product.query.get_or_404(product_id)
 
-    from modules import cover_gen
-    from openai import OpenAI
-    client = OpenAI(api_key=s.image_ai_api_key, timeout=45.0)
+    # Step 1: get product info from WB Content API (text only, no CDN)
+    wb_key = (s.wb_content_api_key or s.wb_stats_api_key or '').strip()
+    card_info = _get_wb_card_info(wb_key, product.wb_article)
+    cover_info = card_info or f'Товар: {product.name} (арт. {product.wb_article})'
 
-    # Step 1: try to read my current cover via OpenAI Vision
-    cover_info = ''
-    cover_url = _wb_cover_url(product.wb_article, 1)
-    try:
-        resp = client.chat.completions.create(
-            model='gpt-4o',
-            messages=[{'role': 'user', 'content': [
-                {'type': 'text', 'text': cover_gen.COVER_INFO_PROMPT},
-                {'type': 'image_url', 'image_url': {'url': cover_url, 'detail': 'high'}},
-            ]}],
-            max_tokens=600,
-            timeout=40,
-        )
-        cover_info = resp.choices[0].message.content
-    except Exception as e:
-        cover_info = f'[Не удалось считать обложку автоматически: {e}]'
-
-    # Step 2: fetch competitor covers from WB search
+    # Step 2: get competitor names from WB search (text, no images to OpenAI)
     covers = []
+    competitor_names = []
     try:
-        covers = cover_gen.search_wb_covers(keyword, limit=6)
+        from modules import cover_gen
+        covers = cover_gen.search_wb_covers(keyword, limit=8)
+        competitor_names = [f"{c['brand']} — {c['name']}" for c in covers[:6] if c.get('name')]
     except Exception:
         covers = []
 
-    # Step 3: analyze competitors with GPT-4o
-    cover_info_block = (
-        f'\n\nИНФОРМАЦИЯ С ТЕКУЩЕЙ ОБЛОЖКИ:\n{cover_info}\n'
-        f'Эти данные (количество, claims, состав) ОБЯЗАТЕЛЬНО включи в промпт.'
-    ) if cover_info and '[Не удалось' not in cover_info else ''
-    hint_line = f'\nДополнительно: {extra_hint}' if extra_hint else ''
+    # Step 3: build prompt with GPT-4o (text only — fast and reliable)
+    hint_line = f'\nДополнительные пожелания: {extra_hint}' if extra_hint else ''
+    competitors_block = '\n'.join(competitor_names) if competitor_names else 'данные не получены'
 
-    analysis_prompt = f"""Ты эксперт по визуальному маркетингу на маркетплейсах.
+    prompt_text = f"""Ты эксперт по визуальному маркетингу на Wildberries.
 
-Проанализируй обложки конкурентов в нише "{keyword}" на Wildberries.
-Мой товар: {product.name}{cover_info_block}{hint_line}
+Ниша: "{keyword}"
+Мой товар: {product.name}
+Информация о товаре из кабинета WB:
+{cover_info}
+{hint_line}
 
-Что делает обложку кликабельной (высокий CTR):
-1. Цветовые схемы и фоны топ-товаров
-2. Текстовые бейджи и акценты (цифры, выгоды)
-3. Расположение товара в кадре
-4. Ключевые визуальные триггеры
+Топ конкурентов в нише (название и бренд):
+{competitors_block}
 
-Напиши детальный промпт на английском для создания обложки моего товара.
-Промпт ОБЯЗАН включать всю текстовую информацию с текущей обложки.
-Описывает фон, расположение, текст-оверлеи, цвета.
+Твоя задача — создать детальный промпт для DALL-E 3 для генерации обложки товара WB.
 
-Формат:
-АНАЛИЗ:
-[3-5 конкретных инсайтов]
+Промпт должен описывать:
+1. Визуальный стиль (фон, цвета, атмосфера)
+2. Расположение товара в кадре
+3. Текстовые бейджи и надписи — используй реальные данные товара (количество, состав, УТП)
+4. Элементы которые делают обложку кликабельной в нише
 
-ПРОМПТ:
-[prompt на английском, 200-350 слов]"""
+Формат ответа:
+АНАЛИЗ НИШИ:
+[3-4 инсайта о том что работает в данной нише]
 
-    competitor_images = []
-    for c in covers[:4]:
-        competitor_images.append({
-            'type': 'image_url',
-            'image_url': {'url': c['url'], 'detail': 'low'}
-        })
+ПРОМПТ ДЛЯ DALLE:
+[Детальный промпт на английском, 150-250 слов, с конкретными текстами с обложки]"""
 
     try:
-        analysis_resp = client.chat.completions.create(
+        from openai import OpenAI
+        client = OpenAI(api_key=s.image_ai_api_key, timeout=60.0)
+        resp = client.chat.completions.create(
             model='gpt-4o',
-            messages=[{'role': 'user', 'content': [{'type': 'text', 'text': analysis_prompt}] + competitor_images}],
-            max_tokens=1000,
-            timeout=60,
+            messages=[{'role': 'user', 'content': prompt_text}],
+            max_tokens=800,
         )
-        analysis_text = analysis_resp.choices[0].message.content
+        analysis_text = resp.choices[0].message.content
     except Exception as e:
-        return jsonify({'error': f'GPT-4o анализ не удался: {e}'}), 500
+        return jsonify({'error': f'OpenAI ошибка: {str(e)}'}), 500
+
+    dalle_prompt = ''
+    if 'ПРОМПТ ДЛЯ DALLE:' in analysis_text:
+        dalle_prompt = analysis_text.split('ПРОМПТ ДЛЯ DALLE:')[-1].strip()
+    elif 'ПРОМПТ:' in analysis_text:
+        dalle_prompt = analysis_text.split('ПРОМПТ:')[-1].strip()
+    if not dalle_prompt:
+        dalle_prompt = (
+            f'Professional Wildberries marketplace product cover for {product.name}. '
+            f'Category: {keyword}. Eye-catching design, bold text badges with product benefits, '
+            f'studio lighting, clean background, photorealistic.'
+        )
+
+    return jsonify({
+        'cover_info': cover_info,
+        'covers': covers,
+        'analysis': analysis_text,
+        'dalle_prompt': dalle_prompt,
+        'used_current_cover': bool(card_info),
+    })
+
 
     dalle_prompt = ''
     if 'ПРОМПТ:' in analysis_text:
