@@ -44,11 +44,27 @@
                        value="{{ settings.image_ai_api_key or '' }}"
                        placeholder="sk-... (из platform.openai.com → API keys)">
                 <div class="form-hint">
-                    Используется для анализа обложек конкурентов (GPT-4o) и генерации новых обложек (GPT Image 1 / DALL-E 3).
+                    Используется для анализа обложек конкурентов (GPT-4o) и генерации новых обложек (DALL-E 3).
                     <div class="api-status" style="margin-top:6px;">
                         <div class="api-dot {% if settings.image_ai_api_key %}connected{% else %}disconnected{% endif %}"></div>
                         {% if settings.image_ai_api_key %}Подключён{% else %}Не подключён{% endif %}
                     </div>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:16px;">
+                <label class="form-label">Прокси для OpenAI <span style="color:#6b7280;font-weight:400;">(если сервер в России)</span></label>
+                <input type="text" name="openai_proxy_url" class="form-control"
+                       value="{{ settings.openai_proxy_url or '' }}"
+                       placeholder="http://user:pass@host:port  или  socks5://user:pass@host:port">
+                <div class="form-hint">
+                    OpenAI блокирует запросы с российских IP. Укажи адрес HTTP или SOCKS5 прокси из другой страны.
+                    Оставь пустым, если сервер уже находится в поддерживаемой стране.
+                    {% if settings.openai_proxy_url %}
+                    <div class="api-status" style="margin-top:6px;">
+                        <div class="api-dot connected"></div>
+                        Прокси настроен
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -10,6 +10,7 @@ class Settings(db.Model):
     wb_content_api_key = db.Column(db.String(256), default='')    # Контент
     wb_analytics_api_key = db.Column(db.String(256), default='')  # Аналитика
     image_ai_api_key = db.Column(db.String(256), default='')      # OpenAI
+    openai_proxy_url = db.Column(db.String(512), default='')     # HTTP/SOCKS proxy for OpenAI
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

@@ -29,6 +29,16 @@ def _wb_cover_url(article, photo_number=1):
 
 app.jinja_env.globals['wb_cover_url'] = _wb_cover_url
 
+
+def _make_openai_client(api_key, timeout=60.0, max_retries=2, proxy_url=None):
+    """Build OpenAI client, optionally routing through an HTTP/SOCKS proxy."""
+    from openai import OpenAI
+    if proxy_url and proxy_url.strip():
+        import httpx
+        http_client = httpx.Client(proxy=proxy_url.strip(), timeout=timeout)
+        return OpenAI(api_key=api_key, http_client=http_client, max_retries=max_retries)
+    return OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
+
 with app.app_context():
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
     os.makedirs(os.path.join(BASE_DIR, 'static', 'uploads'), exist_ok=True)
@@ -43,6 +53,7 @@ with app.app_context():
             'ALTER TABLE settings ADD COLUMN wb_analytics_api_key VARCHAR(256) DEFAULT ""',
             'ALTER TABLE settings ADD COLUMN wb_content_api_key VARCHAR(256) DEFAULT ""',
             'ALTER TABLE product ADD COLUMN photo_url VARCHAR(512) DEFAULT ""',
+            'ALTER TABLE settings ADD COLUMN openai_proxy_url VARCHAR(512) DEFAULT ""',
         ]:
             try:
                 conn.execute(text(sql))
@@ -427,8 +438,8 @@ def api_test_openai():
     if not s or not s.image_ai_api_key:
         return jsonify({'ok': False, 'error': 'Ключ OpenAI не настроен в Настройках'})
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=s.image_ai_api_key, timeout=15.0)
+        client = _make_openai_client(s.image_ai_api_key, timeout=15.0, max_retries=0,
+                                     proxy_url=getattr(s, 'openai_proxy_url', None))
         models = client.models.list()
         return jsonify({'ok': True, 'models_count': len(list(models))})
     except Exception as e:
@@ -453,7 +464,7 @@ def api_covers_analyze():
         return jsonify({'error': 'Укажите товар и ключевой запрос'}), 400
 
     product = Product.query.get_or_404(product_id)
-    from openai import OpenAI
+    _proxy = getattr(s, 'openai_proxy_url', None)
 
     # ── Step 1: Product info from WB Content API (text, always works) ──
     wb_key = (s.wb_content_api_key or s.wb_stats_api_key or '').strip()
@@ -472,7 +483,7 @@ def api_covers_analyze():
     visual_insight = ''
     if covers:
         try:
-            client_fast = OpenAI(api_key=s.image_ai_api_key, timeout=20.0, max_retries=0)
+            client_fast = _make_openai_client(s.image_ai_api_key, timeout=20.0, max_retries=0, proxy_url=_proxy)
             img_content = [
                 {'type': 'image_url', 'image_url': {'url': c['url'], 'detail': 'low'}}
                 for c in covers[:4]
@@ -536,7 +547,7 @@ def api_covers_analyze():
 [Детальный промпт на английском, 200-300 слов]"""
 
     try:
-        client = OpenAI(api_key=s.image_ai_api_key, timeout=60.0, max_retries=1)
+        client = _make_openai_client(s.image_ai_api_key, timeout=60.0, max_retries=1, proxy_url=_proxy)
         resp = client.chat.completions.create(
             model='gpt-4o',
             messages=[{'role': 'user', 'content': final_prompt}],
@@ -596,8 +607,8 @@ def api_covers_generate_image():
     if not dalle_prompt:
         return jsonify({'error': 'Промпт пустой'}), 400
 
-    from openai import OpenAI
-    client = OpenAI(api_key=s.image_ai_api_key, timeout=120.0)
+    _proxy2 = getattr(Settings.query.first(), 'openai_proxy_url', None)
+    client = _make_openai_client(s.image_ai_api_key, timeout=120.0, max_retries=1, proxy_url=_proxy2)
     try:
         img_resp = client.images.generate(
             model='dall-e-3',
@@ -636,8 +647,8 @@ def api_covers_generate():
     from modules import cover_gen
     try:
         if custom_prompt:
-            from openai import OpenAI
-            client = OpenAI(api_key=s.image_ai_api_key, timeout=120.0)
+            _px = getattr(s, 'openai_proxy_url', None)
+            client = _make_openai_client(s.image_ai_api_key, timeout=120.0, max_retries=1, proxy_url=_px)
             img_resp = client.images.generate(
                 model='dall-e-3', prompt=custom_prompt[:4000],
                 size='1024x1024', quality='standard', n=1
@@ -690,6 +701,7 @@ def save_settings():
     s.wb_content_api_key = wb_key
     s.wb_analytics_api_key = wb_key
     s.image_ai_api_key = request.form.get('image_ai_api_key', '').strip()
+    s.openai_proxy_url = request.form.get('openai_proxy_url', '').strip()
     db.session.commit()
     flash('Настройки сохранены', 'success')
     return redirect(url_for('settings'))
