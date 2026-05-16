@@ -15,9 +15,19 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 db.init_app(app)
 
-# Make WB cover URL available in all templates
-from modules.cover_gen import _wb_image_url as _wb_url
-app.jinja_env.globals['wb_cover_url'] = lambda article: _wb_url(int(article), photo_number=1)
+# WB CDN URL helper (mirrors Python formula in cover_gen.py — no imports needed)
+def _wb_cover_url(article, photo_number=1):
+    nm = int(article)
+    vol = nm // 100000
+    part = nm // 1000
+    fixed = [(143,1),(287,2),(431,3),(719,4),(1007,5),(1061,6),(1115,7),(1169,8),
+             (1313,9),(1601,10),(1655,11),(1919,12),(2045,13),(2189,14),(2405,15),(2621,16),(2837,17)]
+    basket = next((str(b).zfill(2) for thr, b in fixed if vol <= thr), None)
+    if basket is None:
+        basket = str(18 + (vol - 2838) // 216).zfill(2)
+    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
+
+app.jinja_env.globals['wb_cover_url'] = _wb_cover_url
 
 with app.app_context():
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
