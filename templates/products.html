@@ -10,6 +10,16 @@
     <button class="btn btn-primary" onclick="openModal('addProductModal')">+ Добавить вручную</button>
 </div>
 
+{% if sync_error %}
+<div class="flash flash-error">
+    Синхронизация с WB не удалась: {{ sync_error }}
+</div>
+{% elif sync_added > 0 %}
+<div class="flash flash-success">
+    Добавлено новых товаров с WB: {{ sync_added }}
+</div>
+{% endif %}
+
 {% if products %}
 <div class="card">
     <div class="card-body" style="padding: 0;">

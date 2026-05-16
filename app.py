@@ -58,18 +58,22 @@ def dashboard():
 @app.route('/products')
 def products():
     s = Settings.query.first()
+    sync_error = None
+    sync_added = 0
     if s and s.wb_content_api_key:
-        _sync_wb_products(s.wb_content_api_key)
+        sync_added, sync_error = _sync_wb_products(s.wb_content_api_key)
     all_products = Product.query.order_by(Product.created_at.desc()).all()
-    return render_template('products.html', products=all_products)
+    return render_template('products.html', products=all_products,
+                           sync_error=sync_error, sync_added=sync_added)
 
 
 def _sync_wb_products(api_key):
-    """Pull all seller cards from WB Content API and add new ones to DB."""
+    """Pull all seller cards from WB Content API. Returns (added_count, error_str)."""
     token = api_key.strip()
     if not token.lower().startswith('bearer '):
         token = f'Bearer {token}'
     cursor = {}
+    added = 0
     try:
         while True:
             body = {'settings': {'cursor': {'limit': 100, **cursor}, 'filter': {'withPhoto': -1}}}
@@ -79,8 +83,13 @@ def _sync_wb_products(api_key):
                 headers={'Authorization': token, 'Content-Type': 'application/json'},
                 timeout=15
             )
+            if r.status_code == 401:
+                return 0, 'Ошибка авторизации (401) — проверьте API-ключ в Настройках'
+            if r.status_code == 403:
+                return 0, 'Нет доступа (403) — токен должен иметь права «Контент» (чтение)'
             if r.status_code != 200:
-                break
+                return 0, f'WB API вернул ошибку {r.status_code}: {r.text[:150]}'
+
             data = r.json()
             cards = data.get('cards', [])
             if not cards:
@@ -93,13 +102,15 @@ def _sync_wb_products(api_key):
                     name = card.get('title', '') or card.get('subjectName', '') or f'Товар {nm_id}'
                     category = card.get('subjectName', '')
                     db.session.add(Product(wb_article=nm_id, name=name, category=category))
+                    added += 1
             db.session.commit()
             next_cursor = data.get('cursor', {})
             if not next_cursor.get('nmID') or len(cards) < 100:
                 break
             cursor = {'nmID': next_cursor['nmID'], 'updatedAt': next_cursor.get('updatedAt', '')}
-    except Exception:
-        pass
+        return added, None
+    except Exception as e:
+        return 0, str(e)
 
 
 @app.route('/api/wb/import-products', methods=['POST'])
