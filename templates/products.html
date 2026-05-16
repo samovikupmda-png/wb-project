@@ -5,20 +5,21 @@
 <div class="flex-between page-header">
     <div>
         <h1>Мои товары</h1>
-        <p>Синхронизируется с WB автоматически при открытии страницы</p>
+        <p>Товары из вашего кабинета Wildberries</p>
     </div>
-    <button class="btn btn-primary" onclick="openModal('addProductModal')">+ Добавить вручную</button>
+    <div style="display:flex;gap:8px;">
+        <form action="{{ url_for('sync_products') }}" method="POST" style="margin:0;">
+            <button type="submit" class="btn btn-secondary">↻ Синхронизировать с WB</button>
+        </form>
+        <button class="btn btn-primary" onclick="openModal('addProductModal')">+ Добавить вручную</button>
+    </div>
 </div>
 
-{% if sync_error %}
-<div class="flash flash-error">
-    Синхронизация с WB не удалась: {{ sync_error }}
-</div>
-{% elif sync_added > 0 %}
-<div class="flash flash-success">
-    Добавлено новых товаров с WB: {{ sync_added }}
-</div>
-{% endif %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for category, message in messages %}
+<div class="flash flash-{{ 'error' if category == 'error' else 'success' }}">{{ message }}</div>
+{% endfor %}
+{% endwith %}
 
 {% if products %}
 <div class="card">

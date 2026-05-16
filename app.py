@@ -58,19 +58,29 @@ def dashboard():
 
 @app.route('/products')
 def products():
-    s = Settings.query.first()
-    sync_error = None
-    sync_added = 0
-    api_key = (s.wb_content_api_key or s.wb_stats_api_key or '') if s else ''
-    if api_key:
-        sync_added, sync_error = _sync_wb_products(api_key)
     all_products = Product.query.order_by(Product.created_at.desc()).all()
-    return render_template('products.html', products=all_products,
-                           sync_error=sync_error, sync_added=sync_added)
+    return render_template('products.html', products=all_products)
+
+
+@app.route('/products/sync', methods=['POST'])
+def sync_products():
+    s = Settings.query.first()
+    api_key = (s.wb_content_api_key or s.wb_stats_api_key or '') if s else ''
+    if not api_key:
+        flash('API-ключ WB не настроен. Добавьте его в Настройках.', 'error')
+        return redirect(url_for('products'))
+    added, error = _sync_wb_products(api_key)
+    if error:
+        flash(f'Ошибка синхронизации: {error}', 'error')
+    elif added > 0:
+        flash(f'Добавлено новых товаров с WB: {added}', 'success')
+    else:
+        flash('Товары актуальны — ничего нового', 'success')
+    return redirect(url_for('products'))
 
 
 def _sync_wb_products(api_key):
-    """Pull all seller cards from WB Content API. Returns (added_count, error_str)."""
+    """Pull all seller cards from WB Content API v2. Returns (added_count, error_str)."""
     token = api_key.strip()
     if not token.lower().startswith('bearer '):
         token = f'Bearer {token}'
@@ -80,17 +90,17 @@ def _sync_wb_products(api_key):
         while True:
             body = {'settings': {'cursor': {'limit': 100, **cursor}, 'filter': {'withPhoto': -1}}}
             r = requests.post(
-                'https://content-api.wildberries.ru/content/v3/cards/filter',
+                'https://content-api.wildberries.ru/content/v2/get/cards/list',
                 json=body,
                 headers={'Authorization': token, 'Content-Type': 'application/json'},
-                timeout=15
+                timeout=20
             )
             if r.status_code == 401:
                 return 0, 'Ошибка авторизации (401) — проверьте API-ключ в Настройках'
             if r.status_code == 403:
-                return 0, 'Нет доступа (403) — токен должен иметь права «Контент» (чтение)'
+                return 0, 'Нет доступа (403) — токен должен иметь права «Контент»'
             if r.status_code != 200:
-                return 0, f'WB API вернул ошибку {r.status_code}: {r.text[:150]}'
+                return 0, f'WB API {r.status_code}: {r.text[:200]}'
 
             data = r.json()
             cards = data.get('cards', [])
@@ -133,10 +143,10 @@ def api_import_products():
         while True:
             body = {'settings': {'cursor': {'limit': 100, **cursor}, 'filter': {'withPhoto': -1}}}
             r = requests.post(
-                'https://content-api.wildberries.ru/content/v3/cards/filter',
+                'https://content-api.wildberries.ru/content/v2/get/cards/list',
                 json=body,
                 headers={'Authorization': token, 'Content-Type': 'application/json'},
-                timeout=15
+                timeout=20
             )
             if r.status_code != 200:
                 return jsonify({'error': f'WB API ошибка {r.status_code}: {r.text[:200]}'}), 400
@@ -322,7 +332,7 @@ def api_wb_diagnose():
     result['token_prefix'] = token[:30] + '...'
     try:
         r = requests.post(
-            'https://content-api.wildberries.ru/content/v3/cards/filter',
+            'https://content-api.wildberries.ru/content/v2/get/cards/list',
             json={'settings': {'cursor': {'limit': 3}, 'filter': {'withPhoto': -1}}},
             headers={'Authorization': token, 'Content-Type': 'application/json'},
             timeout=15
