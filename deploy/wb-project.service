@@ -10,7 +10,7 @@ Environment="PATH=/var/www/wb-project/venv/bin"
 ExecStart=/var/www/wb-project/venv/bin/gunicorn \
     --workers 2 \
     --bind 127.0.0.1:8000 \
-    --timeout 120 \
+    --timeout 360 \
     --reload \
     --access-logfile /var/log/wb-project/access.log \
     --error-logfile /var/log/wb-project/error.log \

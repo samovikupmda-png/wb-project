@@ -77,13 +77,13 @@ def search_wb_covers(keyword, limit=8):
         return []
 
 
-def _load_competitor_images(covers):
+def _load_competitor_images(covers, max_load=4):
     image_content = []
     valid_covers = []
-    for c in covers:
+    for c in covers[:max_load]:
         try:
-            resp = requests.get(c['url'], timeout=8, headers=HEADERS)
-            if resp.status_code == 200:
+            resp = requests.get(c['url'], timeout=6, headers=HEADERS)
+            if resp.status_code == 200 and len(resp.content) > 3000:
                 b64 = base64.b64encode(resp.content).decode()
                 image_content.append({
                     'type': 'image_url',
@@ -233,14 +233,26 @@ def analyze_and_generate(keyword, product_name, openai_key,
             f'Apply this cover design around it: {dalle_prompt[:2500]}'
         )
         png_file = _to_png_bytes(product_image_bytes)
-        img_resp = client.images.edit(
-            model='gpt-image-1',
-            image=('product.png', png_file, 'image/png'),
-            prompt=full_prompt[:4000],
-            size='1024x1024',
-        )
-        img_b64 = img_resp.data[0].b64_json
-        generated_url = f'data:image/png;base64,{img_b64}'
+        try:
+            img_resp = client.images.edit(
+                model='gpt-image-1',
+                image=('product.png', png_file, 'image/png'),
+                prompt=full_prompt[:4000],
+                size='1024x1024',
+                timeout=180,
+            )
+            img_b64 = img_resp.data[0].b64_json
+            generated_url = f'data:image/png;base64,{img_b64}'
+        except Exception:
+            # Fallback to DALL-E 3 if gpt-image-1 unavailable
+            img_resp = client.images.generate(
+                model='dall-e-3',
+                prompt=dalle_prompt[:4000],
+                size='1024x1024',
+                quality='standard',
+                n=1,
+            )
+            generated_url = img_resp.data[0].url
     else:
         img_resp = client.images.generate(
             model='dall-e-3',
