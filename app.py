@@ -27,6 +27,7 @@ with app.app_context():
             'ALTER TABLE ab_test ADD COLUMN campaign_name VARCHAR(256) DEFAULT ""',
             'ALTER TABLE settings ADD COLUMN wb_content_client_secret VARCHAR(256) DEFAULT ""',
             'ALTER TABLE settings ADD COLUMN wb_analytics_api_key VARCHAR(256) DEFAULT ""',
+            'ALTER TABLE settings ADD COLUMN wb_content_api_key VARCHAR(256) DEFAULT ""',
         ]:
             try:
                 conn.execute(text(sql))
