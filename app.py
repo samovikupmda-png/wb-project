@@ -384,6 +384,140 @@ def api_wb_diagnose():
     return jsonify(result)
 
 
+@app.route('/api/covers/analyze', methods=['POST'])
+def api_covers_analyze():
+    """Step 1: analyze my cover + get + analyze competitors. ~30-60s."""
+    s = Settings.query.first()
+    if not s or not s.image_ai_api_key:
+        return jsonify({'error': 'API-ключ OpenAI не настроен'}), 400
+
+    product_id = request.form.get('product_id')
+    keyword = (request.form.get('keyword') or '').strip()
+    extra_hint = (request.form.get('extra_hint') or '').strip()
+    if not keyword or not product_id:
+        return jsonify({'error': 'Укажите товар и ключевой запрос'}), 400
+
+    product = Product.query.get_or_404(product_id)
+
+    from modules import cover_gen
+    from openai import OpenAI
+    client = OpenAI(api_key=s.image_ai_api_key, timeout=45.0)
+
+    # Step 1: try to read my current cover via OpenAI Vision
+    cover_info = ''
+    cover_url = _wb_cover_url(product.wb_article, 1)
+    try:
+        resp = client.chat.completions.create(
+            model='gpt-4o',
+            messages=[{'role': 'user', 'content': [
+                {'type': 'text', 'text': cover_gen.COVER_INFO_PROMPT},
+                {'type': 'image_url', 'image_url': {'url': cover_url, 'detail': 'high'}},
+            ]}],
+            max_tokens=600,
+            timeout=40,
+        )
+        cover_info = resp.choices[0].message.content
+    except Exception as e:
+        cover_info = f'[Не удалось считать обложку автоматически: {e}]'
+
+    # Step 2: fetch competitor covers from WB search
+    covers = []
+    try:
+        covers = cover_gen.search_wb_covers(keyword, limit=6)
+    except Exception:
+        covers = []
+
+    # Step 3: analyze competitors with GPT-4o
+    cover_info_block = (
+        f'\n\nИНФОРМАЦИЯ С ТЕКУЩЕЙ ОБЛОЖКИ:\n{cover_info}\n'
+        f'Эти данные (количество, claims, состав) ОБЯЗАТЕЛЬНО включи в промпт.'
+    ) if cover_info and '[Не удалось' not in cover_info else ''
+    hint_line = f'\nДополнительно: {extra_hint}' if extra_hint else ''
+
+    analysis_prompt = f"""Ты эксперт по визуальному маркетингу на маркетплейсах.
+
+Проанализируй обложки конкурентов в нише "{keyword}" на Wildberries.
+Мой товар: {product.name}{cover_info_block}{hint_line}
+
+Что делает обложку кликабельной (высокий CTR):
+1. Цветовые схемы и фоны топ-товаров
+2. Текстовые бейджи и акценты (цифры, выгоды)
+3. Расположение товара в кадре
+4. Ключевые визуальные триггеры
+
+Напиши детальный промпт на английском для создания обложки моего товара.
+Промпт ОБЯЗАН включать всю текстовую информацию с текущей обложки.
+Описывает фон, расположение, текст-оверлеи, цвета.
+
+Формат:
+АНАЛИЗ:
+[3-5 конкретных инсайтов]
+
+ПРОМПТ:
+[prompt на английском, 200-350 слов]"""
+
+    competitor_images = []
+    for c in covers[:4]:
+        competitor_images.append({
+            'type': 'image_url',
+            'image_url': {'url': c['url'], 'detail': 'low'}
+        })
+
+    try:
+        analysis_resp = client.chat.completions.create(
+            model='gpt-4o',
+            messages=[{'role': 'user', 'content': [{'type': 'text', 'text': analysis_prompt}] + competitor_images}],
+            max_tokens=1000,
+            timeout=60,
+        )
+        analysis_text = analysis_resp.choices[0].message.content
+    except Exception as e:
+        return jsonify({'error': f'GPT-4o анализ не удался: {e}'}), 500
+
+    dalle_prompt = ''
+    if 'ПРОМПТ:' in analysis_text:
+        dalle_prompt = analysis_text.split('ПРОМПТ:')[-1].strip()
+    if not dalle_prompt:
+        dalle_prompt = (
+            f'Professional Wildberries product cover for {product.name}. '
+            f'Category: {keyword}. Eye-catching, bold text badges, studio lighting, photorealistic.'
+        )
+
+    return jsonify({
+        'cover_info': cover_info,
+        'covers': covers,
+        'analysis': analysis_text,
+        'dalle_prompt': dalle_prompt,
+        'used_current_cover': bool(cover_info and '[Не удалось' not in cover_info),
+    })
+
+
+@app.route('/api/covers/generate-image', methods=['POST'])
+def api_covers_generate_image():
+    """Step 2: generate image from prompt. ~30-90s."""
+    s = Settings.query.first()
+    if not s or not s.image_ai_api_key:
+        return jsonify({'error': 'API-ключ OpenAI не настроен'}), 400
+
+    dalle_prompt = (request.form.get('dalle_prompt') or '').strip()
+    if not dalle_prompt:
+        return jsonify({'error': 'Промпт пустой'}), 400
+
+    from openai import OpenAI
+    client = OpenAI(api_key=s.image_ai_api_key, timeout=120.0)
+    try:
+        img_resp = client.images.generate(
+            model='dall-e-3',
+            prompt=dalle_prompt[:4000],
+            size='1024x1024',
+            quality='standard',
+            n=1,
+        )
+        return jsonify({'generated_url': img_resp.data[0].url})
+    except Exception as e:
+        return jsonify({'error': f'Ошибка генерации: {e}'}), 500
+
+
 @app.route('/api/covers/generate', methods=['POST'])
 def api_covers_generate():
     s = Settings.query.first()
@@ -410,31 +544,15 @@ def api_covers_generate():
     try:
         if custom_prompt:
             from openai import OpenAI
-            client = OpenAI(api_key=s.image_ai_api_key)
-            if product_image_bytes:
-                png = cover_gen._to_png_bytes(product_image_bytes)
-                try:
-                    img_resp = client.images.edit(
-                        model='gpt-image-1', image=('product.png', png, 'image/png'),
-                        prompt=custom_prompt[:4000], size='1024x1024', timeout=180,
-                    )
-                    generated_url = f'data:image/png;base64,{img_resp.data[0].b64_json}'
-                except Exception:
-                    img_resp = client.images.generate(
-                        model='dall-e-3', prompt=custom_prompt[:4000],
-                        size='1024x1024', quality='standard', n=1
-                    )
-                    generated_url = img_resp.data[0].url
-            else:
-                img_resp = client.images.generate(
-                    model='dall-e-3', prompt=custom_prompt[:4000],
-                    size='1024x1024', quality='standard', n=1
-                )
-                generated_url = img_resp.data[0].url
+            client = OpenAI(api_key=s.image_ai_api_key, timeout=120.0)
+            img_resp = client.images.generate(
+                model='dall-e-3', prompt=custom_prompt[:4000],
+                size='1024x1024', quality='standard', n=1
+            )
             return jsonify({
                 'covers': [], 'analysis': '', 'cover_info': '',
-                'dalle_prompt': custom_prompt, 'generated_url': generated_url,
-                'used_product_photo': bool(product_image_bytes), 'used_current_cover': False,
+                'dalle_prompt': custom_prompt, 'generated_url': img_resp.data[0].url,
+                'used_product_photo': False, 'used_current_cover': False,
             })
 
         result = cover_gen.analyze_and_generate(
