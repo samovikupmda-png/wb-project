@@ -3,6 +3,7 @@ from modules.database import db, Settings, Product, ABTest, ABVariant
 from modules import ab_test as ab_module
 import os
 import subprocess
+import requests
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -58,6 +59,67 @@ def dashboard():
 def products():
     all_products = Product.query.order_by(Product.created_at.desc()).all()
     return render_template('products.html', products=all_products)
+
+
+@app.route('/api/wb/import-products', methods=['POST'])
+def api_import_products():
+    s = Settings.query.first()
+    if not s or not s.wb_content_api_key:
+        return jsonify({'error': 'API-ключ WB не настроен. Добавьте его в Настройки.'}), 400
+
+    token = s.wb_content_api_key.strip()
+    if not token.lower().startswith('bearer '):
+        token = f'Bearer {token}'
+
+    added = 0
+    skipped = 0
+    cursor = {}
+
+    try:
+        while True:
+            body = {'settings': {'cursor': {'limit': 100, **cursor}, 'filter': {'withPhoto': -1}}}
+            r = requests.post(
+                'https://content-api.wildberries.ru/content/v3/cards/filter',
+                json=body,
+                headers={'Authorization': token, 'Content-Type': 'application/json'},
+                timeout=15
+            )
+            if r.status_code != 200:
+                return jsonify({'error': f'WB API ошибка {r.status_code}: {r.text[:200]}'}), 400
+
+            data = r.json()
+            cards = data.get('cards', [])
+            if not cards:
+                break
+
+            for card in cards:
+                nm_id = str(card.get('nmID', ''))
+                name = card.get('title', '') or card.get('subjectName', '') or 'Товар WB'
+                category = card.get('subjectName', '')
+                vendor_code = card.get('vendorCode', '')
+
+                if not nm_id:
+                    continue
+
+                if Product.query.filter_by(wb_article=nm_id).first():
+                    skipped += 1
+                    continue
+
+                product = Product(wb_article=nm_id, name=name, category=category)
+                db.session.add(product)
+                added += 1
+
+            db.session.commit()
+
+            # Pagination
+            next_cursor = data.get('cursor', {})
+            if not next_cursor.get('nmID') or len(cards) < 100:
+                break
+            cursor = {'nmID': next_cursor['nmID'], 'updatedAt': next_cursor.get('updatedAt', '')}
+
+        return jsonify({'added': added, 'skipped': skipped})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/products/add', methods=['POST'])
