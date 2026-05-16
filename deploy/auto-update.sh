@@ -10,6 +10,8 @@ NEW=$(git rev-parse HEAD 2>/dev/null)
 
 if [ "$OLD" != "$NEW" ]; then
     echo "$(date): Updated $OLD -> $NEW" >> /tmp/wb-update.log
+    # Install any new Python packages
+    /var/www/wb-project/venv/bin/pip install -r /var/www/wb-project/requirements.txt -q >> /tmp/wb-update.log 2>&1
     chown -R www-data:www-data /var/www/wb-project
     systemctl restart wb-project
 fi
