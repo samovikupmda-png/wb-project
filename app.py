@@ -60,8 +60,9 @@ def products():
     s = Settings.query.first()
     sync_error = None
     sync_added = 0
-    if s and s.wb_content_api_key:
-        sync_added, sync_error = _sync_wb_products(s.wb_content_api_key)
+    api_key = (s.wb_content_api_key or s.wb_stats_api_key or '') if s else ''
+    if api_key:
+        sync_added, sync_error = _sync_wb_products(api_key)
     all_products = Product.query.order_by(Product.created_at.desc()).all()
     return render_template('products.html', products=all_products,
                            sync_error=sync_error, sync_added=sync_added)
@@ -299,6 +300,37 @@ def api_product_photos(article):
     from modules import cover_gen
     photos = cover_gen.get_product_photo_urls(article, max_photos=6)
     return jsonify({'photos': photos})
+
+
+@app.route('/api/wb/diagnose')
+def api_wb_diagnose():
+    """Show exactly what WB API returns — for debugging."""
+    s = Settings.query.first()
+    result = {
+        'wb_stats_key_len': len(s.wb_stats_api_key or ''),
+        'wb_content_key_len': len(s.wb_content_api_key or ''),
+        'wb_analytics_key_len': len(s.wb_analytics_api_key or ''),
+    }
+    key = s.wb_content_api_key or s.wb_stats_api_key or ''
+    if not key:
+        result['error'] = 'Ключ не найден в БД — зайдите в Настройки и сохраните заново'
+        return jsonify(result)
+    token = key.strip()
+    if not token.lower().startswith('bearer '):
+        token = f'Bearer {token}'
+    result['token_prefix'] = token[:30] + '...'
+    try:
+        r = requests.post(
+            'https://content-api.wildberries.ru/content/v3/cards/filter',
+            json={'settings': {'cursor': {'limit': 3}, 'filter': {'withPhoto': -1}}},
+            headers={'Authorization': token, 'Content-Type': 'application/json'},
+            timeout=15
+        )
+        result['status_code'] = r.status_code
+        result['response'] = r.json() if r.headers.get('content-type', '').startswith('application/json') else r.text[:300]
+    except Exception as e:
+        result['exception'] = str(e)
+    return jsonify(result)
 
 
 @app.route('/api/covers/generate', methods=['POST'])
