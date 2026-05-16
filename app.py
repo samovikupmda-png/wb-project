@@ -479,11 +479,11 @@ def api_covers_analyze():
     except Exception:
         covers = []
 
-    # ── Step 3a: Try VISUAL analysis of competitor images (20s, no retry) ──
+    # ── Step 3a: Try VISUAL analysis of competitor images (15s, no retry) ──
     visual_insight = ''
     if covers:
         try:
-            client_fast = _make_openai_client(s.image_ai_api_key, timeout=20.0, max_retries=0, proxy_url=_proxy)
+            client_fast = _make_openai_client(s.image_ai_api_key, timeout=15.0, max_retries=0, proxy_url=_proxy)
             img_content = [
                 {'type': 'image_url', 'image_url': {'url': c['url'], 'detail': 'low'}}
                 for c in covers[:4]
@@ -502,11 +502,11 @@ def api_covers_analyze():
                         'Ответ: 5-7 конкретных пунктов с деталями.'
                     )},
                 ] + img_content}],
-                max_tokens=500,
+                max_tokens=400,
             )
             visual_insight = vis_resp.choices[0].message.content
         except Exception:
-            visual_insight = ''  # silently fall back to text-only
+            visual_insight = ''
 
     # ── Step 3b: Build final prompt with GPT-4o (text + optional visual insight) ──
     hint_line = f'\nДополнительные пожелания от продавца: {extra_hint}' if extra_hint else ''
@@ -547,15 +547,15 @@ def api_covers_analyze():
 [Детальный промпт на английском, 200-300 слов]"""
 
     try:
-        client = _make_openai_client(s.image_ai_api_key, timeout=60.0, max_retries=1, proxy_url=_proxy)
+        client = _make_openai_client(s.image_ai_api_key, timeout=40.0, max_retries=0, proxy_url=_proxy)
         resp = client.chat.completions.create(
             model='gpt-4o',
             messages=[{'role': 'user', 'content': final_prompt}],
-            max_tokens=900,
+            max_tokens=700,
         )
         analysis_text = resp.choices[0].message.content
     except Exception as e:
-        return jsonify({'error': f'OpenAI ошибка: {str(e)}'}), 500
+        return jsonify({'error': f'OpenAI ошибка анализа: {str(e)}'}), 500
 
     dalle_prompt = ''
     for marker in ['ПРОМПТ ДЛЯ DALLE:', 'ПРОМПТ:']:
@@ -607,8 +607,8 @@ def api_covers_generate_image():
     if not dalle_prompt:
         return jsonify({'error': 'Промпт пустой'}), 400
 
-    _proxy2 = getattr(Settings.query.first(), 'openai_proxy_url', None)
-    client = _make_openai_client(s.image_ai_api_key, timeout=120.0, max_retries=1, proxy_url=_proxy2)
+    _proxy2 = getattr(s, 'openai_proxy_url', None)
+    client = _make_openai_client(s.image_ai_api_key, timeout=80.0, max_retries=0, proxy_url=_proxy2)
     try:
         img_resp = client.images.generate(
             model='dall-e-3',
@@ -619,7 +619,7 @@ def api_covers_generate_image():
         )
         return jsonify({'generated_url': img_resp.data[0].url})
     except Exception as e:
-        return jsonify({'error': f'Ошибка генерации: {e}'}), 500
+        return jsonify({'error': f'Ошибка генерации DALL-E: {e}'}), 500
 
 
 @app.route('/api/covers/generate', methods=['POST'])
