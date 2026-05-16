@@ -25,7 +25,7 @@ def _wb_cover_url(article, photo_number=1):
     basket = next((str(b).zfill(2) for thr, b in fixed if vol <= thr), None)
     if basket is None:
         basket = str(18 + (vol - 2838) // 216).zfill(2)
-    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
+    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.webp'
 
 app.jinja_env.globals['wb_cover_url'] = _wb_cover_url
 

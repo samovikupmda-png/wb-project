@@ -30,7 +30,7 @@ def _wb_image_url(nm, photo_number=1, basket=None):
     part = nm // 1000
     if basket is None:
         basket = _calc_basket(vol)
-    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.jpg'
+    return f'https://basket-{basket}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{photo_number}.webp'
 
 
 def get_product_photo_urls(article, max_photos=6):
