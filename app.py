@@ -4,6 +4,8 @@ from modules import ab_test as ab_module
 import os
 import subprocess
 import requests
+import base64
+import concurrent.futures
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -38,6 +40,52 @@ def _make_openai_client(api_key, timeout=60.0, max_retries=2, proxy_url=None):
         http_client = httpx.Client(proxy=proxy_url.strip(), timeout=timeout)
         return OpenAI(api_key=api_key, http_client=http_client, max_retries=max_retries)
     return OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
+
+
+_WB_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://www.wildberries.ru/',
+    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+}
+
+def _download_image_b64(url, proxy_url=None):
+    """Download image, return base64 data-URI string or None on failure.
+    Tries direct first (fast), falls back to proxy if blocked (403/0 bytes)."""
+    def _try(proxies):
+        r = requests.get(url, headers=_WB_HEADERS, timeout=8, proxies=proxies)
+        if r.status_code == 200 and len(r.content) > 1000:
+            ct = r.headers.get('content-type', 'image/webp').split(';')[0].strip()
+            return f'data:{ct};base64,{base64.b64encode(r.content).decode()}'
+        return None
+    try:
+        result = _try(None)  # direct (fast)
+        if result:
+            return result
+    except Exception:
+        pass
+    if proxy_url:
+        try:
+            return _try({'http': proxy_url, 'https': proxy_url})
+        except Exception:
+            pass
+    return None
+
+
+def _fetch_covers_as_b64(cover_list, proxy_url=None, max_images=4):
+    """Download up to max_images WB cover images in parallel, return base64 data-URIs."""
+    urls = [c['url'] for c in cover_list[:max_images]]
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_images) as ex:
+        futures = {ex.submit(_download_image_b64, u, proxy_url): u for u in urls}
+        for f in concurrent.futures.as_completed(futures, timeout=12):
+            try:
+                data = f.result()
+                if data:
+                    results.append(data)
+            except Exception:
+                pass
+    return results
 
 with app.app_context():
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
@@ -479,34 +527,37 @@ def api_covers_analyze():
     except Exception:
         covers = []
 
-    # ── Step 3a: Try VISUAL analysis of competitor images (15s, no retry) ──
+    # ── Step 3a: Download competitor images and run GPT-4o Vision ──
     visual_insight = ''
     if covers:
         try:
-            client_fast = _make_openai_client(s.image_ai_api_key, timeout=15.0, max_retries=0, proxy_url=_proxy)
-            img_content = [
-                {'type': 'image_url', 'image_url': {'url': c['url'], 'detail': 'low'}}
-                for c in covers[:4]
-            ]
-            vis_resp = client_fast.chat.completions.create(
-                model='gpt-4o',
-                messages=[{'role': 'user', 'content': [
-                    {'type': 'text', 'text': (
-                        f'Ты маркетолог-аналитик Wildberries. Проанализируй эти обложки товаров из ниши "{keyword}".\n'
-                        'Опиши КОНКРЕТНО:\n'
-                        '1. ЦВЕТА — какие цвета доминируют на фоне, на продукте, в тексте\n'
-                        '2. ФОНЫ — однотонный/градиент/текстура/сцена, цвета\n'
-                        '3. ТЕКСТ — что написано на обложках, какие УТП, цифры, claims\n'
-                        '4. КОМПОЗИЦИЯ — где стоит товар, как расположены элементы\n'
-                        '5. ЧТО ВЫДЕЛЯЕТ лучшие обложки среди остальных\n'
-                        'Ответ: 5-7 конкретных пунктов с деталями.'
-                    )},
-                ] + img_content}],
-                max_tokens=400,
-            )
-            visual_insight = vis_resp.choices[0].message.content
+            # Download images server-side through proxy (bypasses WB IP block + OpenAI can't fetch WB CDN)
+            img_b64_list = _fetch_covers_as_b64(covers, proxy_url=_proxy, max_images=4)
+            if img_b64_list:
+                client_vis = _make_openai_client(s.image_ai_api_key, timeout=30.0, max_retries=0, proxy_url=_proxy)
+                img_content = [
+                    {'type': 'image_url', 'image_url': {'url': data_uri, 'detail': 'low'}}
+                    for data_uri in img_b64_list
+                ]
+                vis_resp = client_vis.chat.completions.create(
+                    model='gpt-4o',
+                    messages=[{'role': 'user', 'content': [
+                        {'type': 'text', 'text': (
+                            f'Ты маркетолог-аналитик Wildberries. Проанализируй эти обложки товаров из ниши "{keyword}".\n'
+                            'Опиши КОНКРЕТНО:\n'
+                            '1. ЦВЕТА — какие цвета доминируют на фоне, на продукте, в тексте\n'
+                            '2. ФОНЫ — однотонный/градиент/текстура/сцена, цвета\n'
+                            '3. ТЕКСТ — что написано на обложках, какие УТП, цифры, claims\n'
+                            '4. КОМПОЗИЦИЯ — где стоит товар, как расположены элементы\n'
+                            '5. ЧТО ВЫДЕЛЯЕТ лучшие обложки среди остальных\n'
+                            'Ответ: 5-7 конкретных пунктов с деталями.'
+                        )},
+                    ] + img_content}],
+                    max_tokens=400,
+                )
+                visual_insight = vis_resp.choices[0].message.content
         except Exception:
-            visual_insight = ''
+            visual_insight = ''  # falls back to text-only analysis
 
     # ── Step 3b: Build final prompt with GPT-4o (text + optional visual insight) ──
     hint_line = f'\nДополнительные пожелания от продавца: {extra_hint}' if extra_hint else ''
