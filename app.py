@@ -763,14 +763,14 @@ def deploy():
         env = os.environ.copy()
         env['HOME'] = '/var/www'
         out = subprocess.run(
-            ['git', '-C', '/var/www/wb-project', 'pull', 'origin',
+            ['/usr/bin/git', '-C', '/var/www/wb-project', 'pull', 'origin',
              'claude/project-management-analysis-jKH5e'],
             capture_output=True, text=True, timeout=60, env=env
         )
         pip = subprocess.run(
             ['/var/www/wb-project/venv/bin/pip', 'install', '-r',
              '/var/www/wb-project/requirements.txt', '-q'],
-            capture_output=True, text=True, timeout=120
+            capture_output=True, text=True, timeout=180
         )
         fix = subprocess.run(
             ['chown', '-R', 'www-data:www-data', '/var/www/wb-project'],
