@@ -277,9 +277,10 @@ def settings():
 @app.route('/settings/save', methods=['POST'])
 def save_settings():
     s = Settings.query.first()
-    s.wb_stats_api_key = request.form.get('wb_stats_api_key', '').strip()
-    s.wb_content_api_key = request.form.get('wb_content_api_key', '').strip()
-    s.wb_analytics_api_key = request.form.get('wb_analytics_api_key', '').strip()
+    wb_key = request.form.get('wb_stats_api_key', '').strip()
+    s.wb_stats_api_key = wb_key
+    s.wb_content_api_key = wb_key
+    s.wb_analytics_api_key = wb_key
     s.image_ai_api_key = request.form.get('image_ai_api_key', '').strip()
     db.session.commit()
     flash('Настройки сохранены', 'success')
