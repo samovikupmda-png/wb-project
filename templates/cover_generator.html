@@ -116,16 +116,34 @@
                 <div class="loader-spinner" style="flex-shrink:0;"></div>
                 <div>
                     <div id="loader-title" style="font-size:15px;font-weight:600;color:#e5e7eb;">Запускаем анализ...</div>
-                    <div id="loader-text" style="font-size:12px;color:#6b7280;margin-top:2px;"></div>
+                    <div id="loader-text" style="font-size:12px;color:#6b7280;margin-top:2px;">Обычно занимает 1–2 минуты</div>
                 </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:0;" id="step-list">
-                <div class="prog-step" id="s1" data-label="Читаем обложку с WB" data-est="~3 сек"></div>
-                <div class="prog-step" id="s2" data-label="Ищем конкурентов по запросу" data-est="~5 сек"></div>
-                <div class="prog-step" id="s3" data-label="GPT-4o анализирует обложки" data-est="~30 сек"></div>
-                <div class="prog-step" id="s4" data-label="DALL-E 3 генерирует обложку" data-est="~40 сек"></div>
+            <div style="display:flex;flex-direction:column;">
+                <div class="prog-step" id="s1">
+                    <div class="prog-icon idle" id="s1-icon">○</div>
+                    <span class="prog-label" id="s1-label">Читаем обложку с WB</span>
+                    <span class="prog-time" id="s1-t">~3 сек</span>
+                </div>
+                <div class="prog-step" id="s2">
+                    <div class="prog-icon idle" id="s2-icon">○</div>
+                    <span class="prog-label" id="s2-label">Ищем конкурентов по запросу</span>
+                    <span class="prog-time" id="s2-t">~5 сек</span>
+                </div>
+                <div class="prog-step" id="s3">
+                    <div class="prog-icon idle" id="s3-icon">○</div>
+                    <span class="prog-label" id="s3-label">GPT-4o анализирует обложки</span>
+                    <span class="prog-time" id="s3-t">~30 сек</span>
+                </div>
+                <div class="prog-step" id="s4">
+                    <div class="prog-icon idle" id="s4-icon">○</div>
+                    <span class="prog-label" id="s4-label">DALL-E 3 генерирует обложку</span>
+                    <span class="prog-time" id="s4-t">~40 сек</span>
+                </div>
             </div>
-            <div id="total-timer" style="text-align:right;font-size:11px;color:#4b5563;margin-top:14px;">Общее время: <span id="total-time">0:00</span></div>
+            <div style="text-align:right;font-size:11px;color:#4b5563;margin-top:14px;border-top:1px solid #1f2937;padding-top:10px;">
+                Общее время: <span id="total-time" style="font-variant-numeric:tabular-nums;">0:00</span>
+            </div>
         </div>
     </div>
 </div>
@@ -234,18 +252,17 @@
 /* Progress steps */
 .prog-step{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #1a2030;position:relative;}
 .prog-step:last-child{border-bottom:none;}
-.prog-icon{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:700;}
-.prog-icon.idle{background:#1f2937;color:#4b5563;font-size:16px;}
-.prog-icon.active{background:#4c1d95;border:2px solid #7c3aed;}
+.prog-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:700;line-height:1;}
+.prog-icon.idle{background:#1f2937;color:#6b7280;}
+.prog-icon.active{background:#4c1d95;color:#a78bfa;animation:pulse 1.2s ease-in-out infinite;}
 .prog-icon.done{background:#065f46;color:#34d399;}
-.prog-icon.active .mini-spin{width:12px;height:12px;border:2px solid #5b21b6;border-top-color:#a78bfa;border-radius:50%;animation:spin 0.7s linear infinite;}
-.prog-label{flex:1;font-size:13px;color:#9ca3af;transition:color 0.3s;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+.prog-label{flex:1;font-size:13px;color:#9ca3af;}
 .prog-label.active{color:#c4b5fd;font-weight:600;}
-.prog-label.done{color:#d1d5db;}
-.prog-time{font-size:12px;color:#4b5563;text-align:right;min-width:70px;font-variant-numeric:tabular-nums;}
-.prog-time.active{color:#7c3aed;}
-.prog-time.done{color:#059669;}
-.prog-est{font-size:11px;color:#374151;}
+.prog-label.done{color:#e5e7eb;}
+.prog-time{font-size:12px;color:#4b5563;text-align:right;min-width:68px;font-variant-numeric:tabular-nums;}
+.prog-time.active{color:#8b5cf6;font-weight:600;}
+.prog-time.done{color:#10b981;}
 
 .btn-sm{padding:6px 14px;font-size:13px;}
 </style>
@@ -259,79 +276,75 @@ let lastPrompt = '';
 let currentCoverUrl = '';
 
 // ── Progress tracker ──────────────────────────────────────────────────────────
-const STEP_META = [
-    { id:'s1', label:'Читаем обложку с WB',           est:'~3 сек'  },
-    { id:'s2', label:'Ищем конкурентов по запросу',   est:'~5 сек'  },
-    { id:'s3', label:'GPT-4o анализирует обложки',    est:'~30 сек' },
-    { id:'s4', label:'DALL-E 3 генерирует обложку',   est:'~40 сек' },
-];
-let stepTimers = {};    // stepId → intervalId
-let stepStart  = {};    // stepId → timestamp
-let stepDone   = {};    // stepId → seconds elapsed
-let totalStart = null;
+const STEP_IDS  = ['s1','s2','s3','s4'];
+const STEP_EST  = ['~3 сек','~5 сек','~30 сек','~40 сек'];
+let stepStart   = [0,0,0,0];
+let stepTimerIds = [null,null,null,null];
+let totalStart  = 0;
 let totalTimerInt = null;
 
-function fmt(sec) {
-    return sec < 60 ? sec + ' сек' : Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
-}
-function fmtTotal(sec) {
-    return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+function fmtSec(s) {
+    return s < 60 ? s + ' сек' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
 }
 
-function renderStep(meta, state) {
-    // state: 'idle' | 'active' | 'done'
-    const el = document.getElementById(meta.id);
-    if (!el) return;
-    let iconHtml, labelCls, timeCls, timeHtml;
-    if (state === 'done') {
-        const elapsed = stepDone[meta.id] || 0;
-        iconHtml = `<div class="prog-icon done">✓</div>`;
-        labelCls = 'done'; timeCls = 'done'; timeHtml = fmt(elapsed);
+function setStepState(idx, state) {
+    var id = STEP_IDS[idx];
+    var icon  = document.getElementById(id + '-icon');
+    var label = document.getElementById(id + '-label');
+    var t     = document.getElementById(id + '-t');
+    if (!icon || !label || !t) return;
+    if (state === 'idle') {
+        icon.className = 'prog-icon idle'; icon.textContent = '○';
+        label.className = 'prog-label';
+        t.className = 'prog-time'; t.textContent = STEP_EST[idx];
     } else if (state === 'active') {
-        iconHtml = `<div class="prog-icon active"><div class="mini-spin"></div></div>`;
-        labelCls = 'active'; timeCls = 'active'; timeHtml = '0 сек';
-    } else {
-        iconHtml = `<div class="prog-icon idle">·</div>`;
-        labelCls = ''; timeCls = ''; timeHtml = `<span class="prog-est">${meta.est}</span>`;
+        icon.className = 'prog-icon active'; icon.textContent = '●';
+        label.className = 'prog-label active';
+        t.className = 'prog-time active'; t.textContent = '0 сек';
+    } else if (state === 'done') {
+        var elapsed = stepStart[idx] ? Math.round((Date.now() - stepStart[idx]) / 1000) : 0;
+        icon.className = 'prog-icon done'; icon.textContent = '✓';
+        label.className = 'prog-label done';
+        t.className = 'prog-time done'; t.textContent = fmtSec(elapsed);
     }
-    el.innerHTML = `${iconHtml}<span class="prog-label ${labelCls}">${meta.label}</span><span class="prog-time ${timeCls}" id="${meta.id}-t">${timeHtml}</span>`;
 }
 
 function initProgress() {
-    stepTimers = {}; stepStart = {}; stepDone = {};
-    STEP_META.forEach(m => renderStep(m, 'idle'));
+    for (var i = 0; i < 4; i++) {
+        if (stepTimerIds[i]) { clearInterval(stepTimerIds[i]); stepTimerIds[i] = null; }
+        stepStart[i] = 0;
+        setStepState(i, 'idle');
+    }
     totalStart = Date.now();
     if (totalTimerInt) clearInterval(totalTimerInt);
-    totalTimerInt = setInterval(() => {
-        const s = Math.floor((Date.now() - totalStart) / 1000);
-        const el = document.getElementById('total-time');
-        if (el) el.textContent = fmtTotal(s);
+    totalTimerInt = setInterval(function() {
+        var el = document.getElementById('total-time');
+        if (el) {
+            var s = Math.round((Date.now() - totalStart) / 1000);
+            el.textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+        }
     }, 1000);
 }
 
-function activateStep(idx) {  // idx 0-based
-    const meta = STEP_META[idx];
-    if (!meta) return;
-    stepStart[meta.id] = Date.now();
-    renderStep(meta, 'active');
-    stepTimers[meta.id] = setInterval(() => {
-        const sec = Math.floor((Date.now() - stepStart[meta.id]) / 1000);
-        const t = document.getElementById(meta.id + '-t');
-        if (t) t.textContent = fmt(sec);
+function activateStep(idx) {
+    stepStart[idx] = Date.now();
+    setStepState(idx, 'active');
+    if (stepTimerIds[idx]) clearInterval(stepTimerIds[idx]);
+    stepTimerIds[idx] = setInterval(function() {
+        var t = document.getElementById(STEP_IDS[idx] + '-t');
+        if (t) t.textContent = fmtSec(Math.round((Date.now() - stepStart[idx]) / 1000));
     }, 1000);
 }
 
-function completeStep(idx) {  // idx 0-based
-    const meta = STEP_META[idx];
-    if (!meta) return;
-    if (stepTimers[meta.id]) { clearInterval(stepTimers[meta.id]); delete stepTimers[meta.id]; }
-    stepDone[meta.id] = stepStart[meta.id] ? Math.floor((Date.now() - stepStart[meta.id]) / 1000) : 0;
-    renderStep(meta, 'done');
+function completeStep(idx) {
+    if (stepTimerIds[idx]) { clearInterval(stepTimerIds[idx]); stepTimerIds[idx] = null; }
+    setStepState(idx, 'done');
 }
 
 function stopAllTimers() {
-    Object.values(stepTimers).forEach(t => clearInterval(t));
-    stepTimers = {};
+    for (var i = 0; i < 4; i++) {
+        if (stepTimerIds[i]) { clearInterval(stepTimerIds[i]); stepTimerIds[i] = null; }
+    }
     if (totalTimerInt) { clearInterval(totalTimerInt); totalTimerInt = null; }
 }
 
