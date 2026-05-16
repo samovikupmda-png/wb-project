@@ -25,6 +25,7 @@ with app.app_context():
             'ALTER TABLE ab_test ADD COLUMN campaign_id INTEGER',
             'ALTER TABLE ab_test ADD COLUMN campaign_name VARCHAR(256) DEFAULT ""',
             'ALTER TABLE settings ADD COLUMN wb_content_client_secret VARCHAR(256) DEFAULT ""',
+            'ALTER TABLE settings ADD COLUMN wb_analytics_api_key VARCHAR(256) DEFAULT ""',
         ]:
             try:
                 conn.execute(text(sql))
@@ -278,7 +279,7 @@ def save_settings():
     s = Settings.query.first()
     s.wb_stats_api_key = request.form.get('wb_stats_api_key', '').strip()
     s.wb_content_api_key = request.form.get('wb_content_api_key', '').strip()
-    s.wb_content_client_secret = request.form.get('wb_content_client_secret', '').strip()
+    s.wb_analytics_api_key = request.form.get('wb_analytics_api_key', '').strip()
     s.image_ai_api_key = request.form.get('image_ai_api_key', '').strip()
     db.session.commit()
     flash('Настройки сохранены', 'success')

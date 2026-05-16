@@ -8,51 +8,67 @@
 </div>
 
 <form action="{{ url_for('save_settings') }}" method="POST">
+
     <div class="card">
         <div class="card-header">
             <span class="card-title">API Wildberries</span>
+            <span style="font-size:12px;color:#6b7280;">Кабинет WB → Настройки → Доступ к API → Создать новый токен</span>
         </div>
         <div class="card-body">
+
             <div class="form-group">
-                <label class="form-label">API-ключ статистики WB</label>
+                <label class="form-label">Токен «Реклама»</label>
                 <input type="password" name="wb_stats_api_key" class="form-control"
                        value="{{ settings.wb_stats_api_key or '' }}"
-                       placeholder="Вставьте API-ключ из кабинета WB → Настройки → API">
+                       placeholder="Вставьте токен с доступом к разделу Реклама">
                 <div class="form-hint">
-                    Нужен доступ: <strong>Статистика</strong> (только чтение).
-                    <div class="api-status" style="margin-top: 6px;">
+                    Нужен доступ: <strong>Реклама</strong> (чтение) — для получения CTR рекламных кампаний и списка кампаний.
+                    <div class="api-status" style="margin-top:6px;">
                         <div class="api-dot {% if settings.wb_stats_api_key %}connected{% else %}disconnected{% endif %}"></div>
-                        {% if settings.wb_stats_api_key %}Ключ добавлен{% else %}Не подключён{% endif %}
+                        {% if settings.wb_stats_api_key %}Подключён{% else %}Не подключён{% endif %}
                     </div>
                 </div>
             </div>
+
             <div class="form-group">
-                <label class="form-label">API-ключ контента WB</label>
+                <label class="form-label">Токен «Контент»</label>
                 <input type="password" name="wb_content_api_key" class="form-control"
                        value="{{ settings.wb_content_api_key or '' }}"
-                       placeholder="Вставьте API-ключ контента">
+                       placeholder="Вставьте токен с доступом к разделу Контент">
                 <div class="form-hint">
-                    Нужен доступ: <strong>Контент</strong> (чтение + запись) — для автоматической смены обложек.
-                    <div class="api-status" style="margin-top: 6px;">
+                    Нужен доступ: <strong>Контент</strong> (чтение + запись) — для получения карточек товаров и смены обложек.
+                    <div class="api-status" style="margin-top:6px;">
                         <div class="api-dot {% if settings.wb_content_api_key %}connected{% else %}disconnected{% endif %}"></div>
-                        {% if settings.wb_content_api_key %}Ключ добавлен{% else %}Не подключён{% endif %}
+                        {% if settings.wb_content_api_key %}Подключён{% else %}Не подключён{% endif %}
                     </div>
                 </div>
             </div>
+
             <div class="form-group">
-                <label class="form-label">Client Secret (WB Content API)</label>
-                <input type="password" name="wb_content_client_secret" class="form-control"
-                       value="{{ settings.wb_content_client_secret or '' }}"
-                       placeholder="Секрет, показанный при создании токена контента">
+                <label class="form-label">Токен «Аналитика»</label>
+                <input type="password" name="wb_analytics_api_key" class="form-control"
+                       value="{{ settings.wb_analytics_api_key or '' }}"
+                       placeholder="Вставьте токен с доступом к разделу Аналитика">
                 <div class="form-hint">
-                    WB показывает Client Secret <strong>один раз</strong> при создании токена.<br>
-                    Если не сохранили — удалите токен контента в кабинете WB и создайте новый, скопировав секрет.
-                    <div class="api-status" style="margin-top: 6px;">
-                        <div class="api-dot {% if settings.wb_content_client_secret %}connected{% else %}disconnected{% endif %}"></div>
-                        {% if settings.wb_content_client_secret %}Secret добавлен{% else %}Не указан — смена обложек недоступна{% endif %}
+                    Нужен доступ: <strong>Аналитика</strong> (чтение) — для мониторинга органического CTR и автозапуска генерации при падении показателей.
+                    <div class="api-status" style="margin-top:6px;">
+                        <div class="api-dot {% if settings.wb_analytics_api_key %}connected{% else %}disconnected{% endif %}"></div>
+                        {% if settings.wb_analytics_api_key %}Подключён{% else %}Не подключён — автомониторинг CTR недоступен{% endif %}
                     </div>
                 </div>
             </div>
+
+            <div style="background:#111827;border:1px solid #1f2937;border-radius:10px;padding:14px 16px;margin-top:4px;">
+                <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">Как создать токены в кабинете WB:</div>
+                <ol style="font-size:13px;color:#9ca3af;margin:0;padding-left:18px;line-height:1.8;">
+                    <li>Перейди в <strong style="color:#e5e7eb;">Настройки → Доступ к API</strong></li>
+                    <li>Нажми <strong style="color:#e5e7eb;">«Создать новый токен»</strong></li>
+                    <li>Выбери нужные разделы (Реклама / Контент / Аналитика)</li>
+                    <li>Скопируй токен и вставь сюда</li>
+                    <li>Можно создать один токен с несколькими разделами сразу</li>
+                </ol>
+            </div>
+
         </div>
     </div>
 
@@ -62,15 +78,15 @@
         </div>
         <div class="card-body">
             <div class="form-group">
-                <label class="form-label">API-ключ Image AI</label>
+                <label class="form-label">OpenAI API-ключ</label>
                 <input type="password" name="image_ai_api_key" class="form-control"
                        value="{{ settings.image_ai_api_key or '' }}"
-                       placeholder="OpenAI API-ключ для генерации обложек">
+                       placeholder="sk-... (из platform.openai.com → API keys)">
                 <div class="form-hint">
-                    Используется для автогенерации вариантов обложек на основе анализа конкурентов.
-                    <div class="api-status" style="margin-top: 6px;">
+                    Используется для анализа обложек конкурентов (GPT-4o) и генерации новых обложек (GPT Image 1 / DALL-E 3).
+                    <div class="api-status" style="margin-top:6px;">
                         <div class="api-dot {% if settings.image_ai_api_key %}connected{% else %}disconnected{% endif %}"></div>
-                        {% if settings.image_ai_api_key %}Ключ добавлен{% else %}Не подключён{% endif %}
+                        {% if settings.image_ai_api_key %}Подключён{% else %}Не подключён{% endif %}
                     </div>
                 </div>
             </div>
