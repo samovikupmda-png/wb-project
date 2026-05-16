@@ -755,6 +755,22 @@ def apply_variant_photo(test_id, variant_id):
 
 DEPLOY_TOKEN = 'wb-d3pl0y-k3y-2026'
 
+@app.route('/pip-install')
+def pip_install():
+    """Install/upgrade Python packages from requirements.txt."""
+    if request.args.get('token') != DEPLOY_TOKEN:
+        return 'Unauthorized', 401
+    try:
+        result = subprocess.run(
+            ['/var/www/wb-project/venv/bin/pip', 'install', '-r',
+             '/var/www/wb-project/requirements.txt', '--upgrade'],
+            capture_output=True, text=True, timeout=300
+        )
+        return f'<pre>STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\nReturn code: {result.returncode}</pre>', 200
+    except Exception as e:
+        return f'<pre>Error: {e}</pre>', 500
+
+
 @app.route('/deploy')
 def deploy():
     if request.args.get('token') != DEPLOY_TOKEN:
