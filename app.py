@@ -57,8 +57,49 @@ def dashboard():
 
 @app.route('/products')
 def products():
+    s = Settings.query.first()
+    if s and s.wb_content_api_key:
+        _sync_wb_products(s.wb_content_api_key)
     all_products = Product.query.order_by(Product.created_at.desc()).all()
     return render_template('products.html', products=all_products)
+
+
+def _sync_wb_products(api_key):
+    """Pull all seller cards from WB Content API and add new ones to DB."""
+    token = api_key.strip()
+    if not token.lower().startswith('bearer '):
+        token = f'Bearer {token}'
+    cursor = {}
+    try:
+        while True:
+            body = {'settings': {'cursor': {'limit': 100, **cursor}, 'filter': {'withPhoto': -1}}}
+            r = requests.post(
+                'https://content-api.wildberries.ru/content/v3/cards/filter',
+                json=body,
+                headers={'Authorization': token, 'Content-Type': 'application/json'},
+                timeout=15
+            )
+            if r.status_code != 200:
+                break
+            data = r.json()
+            cards = data.get('cards', [])
+            if not cards:
+                break
+            for card in cards:
+                nm_id = str(card.get('nmID', ''))
+                if not nm_id:
+                    continue
+                if not Product.query.filter_by(wb_article=nm_id).first():
+                    name = card.get('title', '') or card.get('subjectName', '') or f'Товар {nm_id}'
+                    category = card.get('subjectName', '')
+                    db.session.add(Product(wb_article=nm_id, name=name, category=category))
+            db.session.commit()
+            next_cursor = data.get('cursor', {})
+            if not next_cursor.get('nmID') or len(cards) < 100:
+                break
+            cursor = {'nmID': next_cursor['nmID'], 'updatedAt': next_cursor.get('updatedAt', '')}
+    except Exception:
+        pass
 
 
 @app.route('/api/wb/import-products', methods=['POST'])

@@ -5,15 +5,10 @@
 <div class="flex-between page-header">
     <div>
         <h1>Мои товары</h1>
-        <p>Товары, добавленные в систему для работы</p>
+        <p>Синхронизируется с WB автоматически при открытии страницы</p>
     </div>
-    <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary" id="import-btn" onclick="importFromWB()">↓ Импортировать с WB</button>
-        <button class="btn btn-primary" onclick="openModal('addProductModal')">+ Добавить вручную</button>
-    </div>
+    <button class="btn btn-primary" onclick="openModal('addProductModal')">+ Добавить вручную</button>
 </div>
-
-<div id="import-status" style="display:none;" class="flash flash-success"></div>
 
 {% if products %}
 <div class="card">
@@ -104,35 +99,3 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-async function importFromWB() {
-    const btn = document.getElementById('import-btn');
-    const status = document.getElementById('import-status');
-    btn.disabled = true;
-    btn.textContent = 'Загружаем...';
-    status.style.display = 'none';
-
-    try {
-        const resp = await fetch('/api/wb/import-products', {method: 'POST'});
-        const data = await resp.json();
-        if (data.error) {
-            status.className = 'flash flash-error';
-            status.textContent = data.error;
-        } else {
-            status.className = 'flash flash-success';
-            status.textContent = `Импортировано: ${data.added} новых товаров. ${data.skipped} уже были в системе.`;
-            if (data.added > 0) setTimeout(() => location.reload(), 1500);
-        }
-        status.style.display = 'block';
-    } catch(e) {
-        status.className = 'flash flash-error';
-        status.textContent = 'Ошибка соединения';
-        status.style.display = 'block';
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '↓ Импортировать с WB';
-    }
-}
-</script>
-{% endblock %}
