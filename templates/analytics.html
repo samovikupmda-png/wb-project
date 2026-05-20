@@ -1,14 +1,144 @@
 {% extends "base.html" %}
 {% block title %}Аналитика — WB Tools{% endblock %}
+
 {% block content %}
 <div class="page-header">
-    <h1>Аналитика</h1>
-    <p>Аналитика товаров и конкурентов</p>
+    <h1>Аналитика CTR</h1>
+    <p>Рекламные кампании за последние 30 дней</p>
 </div>
-<div class="coming-soon">
-    <div class="icon">▲</div>
-    <h2>Раздел в разработке</h2>
-    <p>Здесь будет аналитика ваших товаров и анализ конкурентов.<br>
-    Подключите API WB в <a href="/settings" style="color: var(--wb-purple);">Настройках</a> для активации.</p>
+
+{% if not api_configured %}
+<div class="card">
+    <div class="card-body" style="text-align:center;padding:40px;">
+        <div style="font-size:40px;margin-bottom:12px;">🔑</div>
+        <p style="color:#9ca3af;">Подключите API WB в <a href="/settings" style="color:#8b5cf6;">Настройках</a></p>
+    </div>
 </div>
+
+{% elif error and error != 'no_key' %}
+<div class="flash flash-error">Ошибка WB API: {{ error }}</div>
+
+{% elif not campaigns %}
+<div class="card">
+    <div class="card-body" style="text-align:center;padding:40px;">
+        <div style="font-size:40px;margin-bottom:12px;">📭</div>
+        <p style="color:#9ca3af;">Активных и приостановленных кампаний не найдено</p>
+    </div>
+</div>
+
+{% else %}
+
+{% set total_views = campaigns | sum(attribute='views') %}
+{% set total_clicks = campaigns | sum(attribute='clicks') %}
+{% set total_spent = campaigns | sum(attribute='spent') %}
+{% set avg_ctr = (total_clicks / total_views * 100) | round(2) if total_views > 0 else 0 %}
+
+<div class="stats-grid" style="margin-bottom:24px;">
+    <div class="stat-card">
+        <div class="stat-label">Кампаний</div>
+        <div class="stat-value">{{ campaigns | length }}</div>
+        <div class="stat-sub">за 30 дней</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Показов</div>
+        <div class="stat-value">{{ '{:,}'.format(total_views).replace(',', ' ') }}</div>
+        <div class="stat-sub">суммарно</div>
+    </div>
+    <div class="stat-card {% if avg_ctr >= 3 %}accent{% endif %}">
+        <div class="stat-label">Средний CTR</div>
+        <div class="stat-value">{{ avg_ctr }}%</div>
+        <div class="stat-sub">
+            {% if avg_ctr >= 5 %}отлично ✓
+            {% elif avg_ctr >= 3 %}хорошо
+            {% elif avg_ctr >= 1 %}средне
+            {% else %}низкий — меняй обложки
+            {% endif %}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Потрачено</div>
+        <div class="stat-value">{{ '{:,.0f}'.format(total_spent).replace(',', ' ') }} ₽</div>
+        <div class="stat-sub">за 30 дней</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Кампании по CTR</span>
+        <span style="font-size:12px;color:#6b7280;">
+            <span style="color:#10b981;">■</span> 5%+ отлично &nbsp;
+            <span style="color:#8b5cf6;">■</span> 3–5% хорошо &nbsp;
+            <span style="color:#f59e0b;">■</span> 1–3% средне &nbsp;
+            <span style="color:#ef4444;">■</span> &lt;1% низкий
+        </span>
+    </div>
+    <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Кампания</th>
+                        <th>Тип</th>
+                        <th>Статус</th>
+                        <th style="text-align:right;">Показы</th>
+                        <th style="text-align:right;">Клики</th>
+                        <th style="text-align:right;">CTR</th>
+                        <th style="text-align:right;">Расход, ₽</th>
+                        <th>Артикулы</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for c in campaigns %}
+                <tr>
+                    <td>
+                        <div style="font-weight:600;color:#e5e7eb;font-size:13px;">{{ c.name }}</div>
+                        <div style="font-size:11px;color:#4b5563;">ID {{ c.id }}</div>
+                    </td>
+                    <td><span style="font-size:12px;color:#9ca3af;">{{ c.type }}</span></td>
+                    <td>
+                        <span class="badge badge-{% if c.status_code == 9 %}active{% elif c.status_code == 11 %}paused{% else %}completed{% endif %}">
+                            {{ c.status }}
+                        </span>
+                    </td>
+                    <td style="text-align:right;font-size:13px;">{{ '{:,}'.format(c.views).replace(',', ' ') }}</td>
+                    <td style="text-align:right;font-size:13px;">{{ '{:,}'.format(c.clicks).replace(',', ' ') }}</td>
+                    <td style="text-align:right;">
+                        <span style="font-size:15px;font-weight:700;color:
+                            {%- if c.grade == 'excellent' %}#10b981
+                            {%- elif c.grade == 'good' %}#8b5cf6
+                            {%- elif c.grade == 'average' %}#f59e0b
+                            {%- else %}#ef4444{%- endif %};">
+                            {{ c.ctr }}%
+                        </span>
+                    </td>
+                    <td style="text-align:right;font-size:13px;color:#9ca3af;">{{ '{:,.0f}'.format(c.spent).replace(',', ' ') }}</td>
+                    <td style="font-size:12px;color:#6b7280;">
+                        {% for nm in c.articles[:3] %}{{ nm }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        {% if c.articles | length > 3 %}<span style="color:#4b5563;">+{{ c.articles | length - 3 }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if c.ctr < 3 and c.views > 5000 %}
+                        <a href="/cover-generator" class="btn btn-primary btn-sm"
+                           style="white-space:nowrap;" title="CTR низкий — сгенерировать новую обложку">
+                            ✦ Обложку
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top:16px;padding:14px 18px;background:#0d1117;border:1px solid #1f2937;
+            border-radius:10px;font-size:12px;color:#6b7280;line-height:1.8;">
+    <strong style="color:#9ca3af;">Нормы CTR для авто-кампаний:</strong>
+    &nbsp; менее 1% — плохо, нужна новая обложка &nbsp;|&nbsp;
+    1–2% — средне &nbsp;|&nbsp; 3%+ — хорошо &nbsp;|&nbsp; 5%+ — отлично
+</div>
+
+{% endif %}
 {% endblock %}

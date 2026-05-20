@@ -695,7 +695,73 @@ def api_covers_generate():
 
 @app.route('/analytics')
 def analytics():
-    return render_template('analytics.html')
+    s = Settings.query.first()
+    api_key = (s.wb_stats_api_key or '') if s else ''
+    products = Product.query.order_by(Product.name).all()
+    campaigns_data = []
+    error = None
+
+    if api_key:
+        try:
+            from modules import wb_api
+            campaigns = wb_api.get_all_campaigns(api_key)
+            ids = [c['advertId'] for c in campaigns if c.get('advertId')]
+            stats = wb_api.get_campaigns_ctr(api_key, ids, days=30)
+
+            for c in campaigns:
+                cid = c.get('advertId')
+                s_data = stats.get(cid, {})
+                ctr = s_data.get('ctr', 0)
+                # CTR grade
+                if ctr >= 5:
+                    grade = 'excellent'
+                elif ctr >= 3:
+                    grade = 'good'
+                elif ctr >= 1:
+                    grade = 'average'
+                else:
+                    grade = 'bad'
+
+                # Campaign type
+                atype = c.get('type', 0)
+                type_names = {4: 'Каталог', 5: 'Каталог', 6: 'Поиск', 7: 'Поиск', 8: 'Авто', 9: 'Аукцион'}
+                type_name = type_names.get(atype, f'Тип {atype}')
+
+                status = c.get('status', 0)
+                status_names = {4: 'Готова', 9: 'Активна', 11: 'Пауза', 7: 'Завершена'}
+                status_name = status_names.get(status, str(status))
+
+                # Articles in campaign
+                nms = []
+                for param in (c.get('params') or []):
+                    for nm in (param.get('nms') or []):
+                        nms.append(str(nm))
+
+                campaigns_data.append({
+                    'id': cid,
+                    'name': c.get('name', f'Кампания {cid}'),
+                    'type': type_name,
+                    'status': status_name,
+                    'status_code': status,
+                    'views': s_data.get('views', 0),
+                    'clicks': s_data.get('clicks', 0),
+                    'ctr': ctr,
+                    'spent': s_data.get('spent', 0),
+                    'grade': grade,
+                    'articles': nms,
+                })
+
+            campaigns_data.sort(key=lambda x: x['ctr'], reverse=True)
+        except Exception as e:
+            error = str(e)
+    else:
+        error = 'no_key'
+
+    return render_template('analytics.html',
+                           campaigns=campaigns_data,
+                           products=products,
+                           api_configured=bool(api_key),
+                           error=error)
 
 
 # ── Реклама ───────────────────────────────────────────────────────────────────
