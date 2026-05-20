@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, f
 from modules.database import db, Settings, Product, ABTest, ABVariant
 from modules import ab_test as ab_module
 import os
-import subprocess
 import requests
 import base64
 import concurrent.futures
@@ -412,36 +411,6 @@ def api_product_photos(article):
     return jsonify({'photos': photos})
 
 
-@app.route('/api/wb/diagnose')
-def api_wb_diagnose():
-    """Show exactly what WB API returns — for debugging."""
-    s = Settings.query.first()
-    result = {
-        'wb_stats_key_len': len(s.wb_stats_api_key or ''),
-        'wb_content_key_len': len(s.wb_content_api_key or ''),
-        'wb_analytics_key_len': len(s.wb_analytics_api_key or ''),
-    }
-    key = s.wb_content_api_key or s.wb_stats_api_key or ''
-    if not key:
-        result['error'] = 'Ключ не найден в БД — зайдите в Настройки и сохраните заново'
-        return jsonify(result)
-    token = key.strip()
-    if not token.lower().startswith('bearer '):
-        token = f'Bearer {token}'
-    result['token_prefix'] = token[:30] + '...'
-    try:
-        r = requests.post(
-            'https://content-api.wildberries.ru/content/v2/get/cards/list',
-            json={'settings': {'cursor': {'limit': 3}, 'filter': {'withPhoto': -1}}},
-            headers={'Authorization': token, 'Content-Type': 'application/json'},
-            timeout=15
-        )
-        result['status_code'] = r.status_code
-        result['response'] = r.json() if r.headers.get('content-type', '').startswith('application/json') else r.text[:300]
-    except Exception as e:
-        result['exception'] = str(e)
-    return jsonify(result)
-
 
 def _get_wb_card_info(api_key, article):
     """Get product characteristics from WB Content API as text."""
@@ -825,48 +794,6 @@ def apply_variant_photo(test_id, variant_id):
     return redirect(url_for('ab_test_detail', test_id=test_id))
 
 
-DEPLOY_TOKEN = 'wb-d3pl0y-k3y-2026'
-
-@app.route('/pip-install')
-def pip_install():
-    """Install/upgrade Python packages from requirements.txt."""
-    if request.args.get('token') != DEPLOY_TOKEN:
-        return 'Unauthorized', 401
-    try:
-        result = subprocess.run(
-            ['/var/www/wb-project/venv/bin/pip', 'install', '-r',
-             '/var/www/wb-project/requirements.txt', '--upgrade'],
-            capture_output=True, text=True, timeout=300
-        )
-        return f'<pre>STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\nReturn code: {result.returncode}</pre>', 200
-    except Exception as e:
-        return f'<pre>Error: {e}</pre>', 500
-
-
-@app.route('/deploy')
-def deploy():
-    if request.args.get('token') != DEPLOY_TOKEN:
-        return 'Unauthorized', 401
-    try:
-        env = os.environ.copy()
-        env['HOME'] = '/var/www'
-        out = subprocess.run(
-            ['/usr/bin/git', '-C', '/var/www/wb-project', 'pull', 'origin',
-             'claude/project-management-analysis-jKH5e'],
-            capture_output=True, text=True, timeout=60, env=env
-        )
-        pip = subprocess.run(
-            ['/var/www/wb-project/venv/bin/pip', 'install', '-r',
-             '/var/www/wb-project/requirements.txt', '-q'],
-            capture_output=True, text=True, timeout=180
-        )
-        fix = subprocess.run(
-            ['chown', '-R', 'www-data:www-data', '/var/www/wb-project'],
-            capture_output=True, text=True
-        )
-        return f'<pre>OK\n{out.stdout}{out.stderr}\npip:\n{pip.stdout}{pip.stderr}</pre>', 200
-    except Exception as e:
-        return f'<pre>Error: {e}</pre>', 500
 
 
 if __name__ == '__main__':
