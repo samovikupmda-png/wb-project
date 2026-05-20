@@ -747,12 +747,21 @@ def settings():
 @app.route('/settings/save', methods=['POST'])
 def save_settings():
     s = Settings.query.first()
+    # Only update a field if the user typed a new value (empty = keep existing)
     wb_key = request.form.get('wb_stats_api_key', '').strip()
-    s.wb_stats_api_key = wb_key
-    s.wb_content_api_key = wb_key
-    s.wb_analytics_api_key = wb_key
-    s.image_ai_api_key = request.form.get('image_ai_api_key', '').strip()
-    s.openai_proxy_url = request.form.get('openai_proxy_url', '').strip()
+    if wb_key:
+        s.wb_stats_api_key = wb_key
+        s.wb_content_api_key = wb_key
+        s.wb_analytics_api_key = wb_key
+
+    openai_key = request.form.get('image_ai_api_key', '').strip()
+    if openai_key:
+        s.image_ai_api_key = openai_key
+
+    proxy = request.form.get('openai_proxy_url', '').strip()
+    if proxy:
+        s.openai_proxy_url = proxy
+
     db.session.commit()
     flash('Настройки сохранены', 'success')
     return redirect(url_for('settings'))

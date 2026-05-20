@@ -15,21 +15,18 @@
             <span style="font-size:12px;color:#6b7280;">Кабинет WB → Настройки → Доступ к API → Создать новый токен</span>
         </div>
         <div class="card-body">
-
             <div class="form-group">
                 <label class="form-label">API-ключ Wildberries</label>
-                <input type="password" name="wb_stats_api_key" class="form-control"
-                       value="{{ settings.wb_stats_api_key or '' }}"
-                       placeholder="Вставьте токен из кабинета WB → Настройки → Доступ к API">
+                <input type="password" name="wb_stats_api_key" class="form-control" value=""
+                       placeholder="{% if settings.wb_stats_api_key %}Ключ сохранён — введи новый чтобы заменить{% else %}Вставьте токен из кабинета WB{% endif %}">
                 <div class="form-hint">
                     При создании токена выбери все нужные разделы: <strong>Реклама</strong>, <strong>Контент</strong>, <strong>Аналитика</strong> — один токен покрывает всё.
                     <div class="api-status" style="margin-top:6px;">
                         <div class="api-dot {% if settings.wb_stats_api_key %}connected{% else %}disconnected{% endif %}"></div>
-                        {% if settings.wb_stats_api_key %}Подключён{% else %}Не подключён{% endif %}
+                        {% if settings.wb_stats_api_key %}Подключён (ключ скрыт){% else %}Не подключён{% endif %}
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 
@@ -40,31 +37,26 @@
         <div class="card-body">
             <div class="form-group">
                 <label class="form-label">OpenAI API-ключ</label>
-                <input type="password" name="image_ai_api_key" class="form-control"
-                       value="{{ settings.image_ai_api_key or '' }}"
-                       placeholder="sk-... (из platform.openai.com → API keys)">
+                <input type="password" name="image_ai_api_key" class="form-control" value=""
+                       placeholder="{% if settings.image_ai_api_key %}Ключ сохранён — введи новый чтобы заменить{% else %}sk-... (из platform.openai.com → API keys){% endif %}">
                 <div class="form-hint">
                     Используется для анализа обложек конкурентов (GPT-4o) и генерации новых обложек (DALL-E 3).
                     <div class="api-status" style="margin-top:6px;">
                         <div class="api-dot {% if settings.image_ai_api_key %}connected{% else %}disconnected{% endif %}"></div>
-                        {% if settings.image_ai_api_key %}Подключён{% else %}Не подключён{% endif %}
+                        {% if settings.image_ai_api_key %}Подключён (ключ скрыт){% else %}Не подключён{% endif %}
                     </div>
                 </div>
             </div>
             <div class="form-group" style="margin-top:16px;">
                 <label class="form-label">Прокси для OpenAI <span style="color:#6b7280;font-weight:400;">(если сервер в России)</span></label>
-                <input type="text" name="openai_proxy_url" class="form-control"
-                       value="{{ settings.openai_proxy_url or '' }}"
-                       placeholder="http://user:pass@host:port  или  socks5://user:pass@host:port">
+                <input type="password" name="openai_proxy_url" class="form-control" value=""
+                       placeholder="{% if settings.openai_proxy_url %}Прокси сохранён — введи новый чтобы заменить{% else %}http://user:pass@host:port{% endif %}">
                 <div class="form-hint">
                     OpenAI блокирует запросы с российских IP. Укажи адрес HTTP или SOCKS5 прокси из другой страны.
-                    Оставь пустым, если сервер уже находится в поддерживаемой стране.
-                    {% if settings.openai_proxy_url %}
                     <div class="api-status" style="margin-top:6px;">
-                        <div class="api-dot connected"></div>
-                        Прокси настроен
+                        <div class="api-dot {% if settings.openai_proxy_url %}connected{% else %}disconnected{% endif %}"></div>
+                        {% if settings.openai_proxy_url %}Прокси настроен (скрыт){% else %}Не настроен{% endif %}
                     </div>
-                    {% endif %}
                 </div>
             </div>
         </div>
