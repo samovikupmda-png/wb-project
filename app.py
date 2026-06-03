@@ -1,7 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
-from modules.database import db, Settings, Product, ABTest, ABVariant
+from modules.database import db, Settings, Product, ABTest, ABVariant, CoverGeneration, N8nEvent
 from modules import ab_test as ab_module
+from modules import cover_generator as cover_module
+from modules import n8n_integration as n8n_module
 import os
+import threading
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -180,9 +183,232 @@ def save_settings():
     s.wb_stats_api_key = request.form.get('wb_stats_api_key', '').strip()
     s.wb_content_api_key = request.form.get('wb_content_api_key', '').strip()
     s.image_ai_api_key = request.form.get('image_ai_api_key', '').strip()
+    s.ai_provider = request.form.get('ai_provider', 'openai').strip()
+    s.ai_model = request.form.get('ai_model', 'dall-e-3').strip()
+    s.n8n_webhook_url = request.form.get('n8n_webhook_url', '').strip()
+    s.n8n_secret = request.form.get('n8n_secret', '').strip()
+    s.n8n_notify_on_complete = bool(request.form.get('n8n_notify_on_complete'))
+    s.n8n_notify_on_winner = bool(request.form.get('n8n_notify_on_winner'))
     db.session.commit()
     flash('Настройки сохранены', 'success')
     return redirect(url_for('settings'))
+
+
+# ── Генерация обложек ─────────────────────────────────────────────────────────
+
+@app.route('/covers')
+def covers():
+    generations = cover_module.get_all_generations()
+    products = Product.query.all()
+    return render_template('covers.html', generations=generations, products=products)
+
+
+@app.route('/covers/generate', methods=['POST'])
+def generate_cover():
+    product_id = request.form.get('product_id')
+    style = request.form.get('style', 'product_photo')
+    custom_prompt = request.form.get('custom_prompt', '').strip()
+
+    if not product_id:
+        flash('Выберите товар', 'error')
+        return redirect(url_for('covers'))
+
+    product = Product.query.get_or_404(product_id)
+    settings = Settings.query.first()
+    prompt = cover_module.build_prompt(product.name, product.category, style, custom_prompt)
+
+    gen = CoverGeneration(
+        product_id=product_id,
+        prompt=prompt,
+        style=style,
+        ai_provider=settings.ai_provider if settings else 'openai',
+        ai_model=settings.ai_model if settings else 'dall-e-3',
+        status='pending',
+    )
+    db.session.add(gen)
+    db.session.commit()
+
+    # Запускаем генерацию в фоновом потоке
+    t = threading.Thread(target=cover_module.generate_covers, args=(gen.id,))
+    t.daemon = True
+    t.start()
+
+    flash(f'Генерация запущена для товара «{product.name}»', 'success')
+    return redirect(url_for('cover_detail', gen_id=gen.id))
+
+
+@app.route('/covers/<int:gen_id>')
+def cover_detail(gen_id):
+    gen = cover_module.get_generation(gen_id)
+    products = Product.query.all()
+    return render_template('cover_detail.html', gen=gen, products=products)
+
+
+@app.route('/covers/<int:gen_id>/status')
+def cover_status(gen_id):
+    gen = CoverGeneration.query.get_or_404(gen_id)
+    return jsonify({'status': gen.status, 'images': gen.images, 'error': gen.error_message})
+
+
+@app.route('/covers/<int:gen_id>/create-test', methods=['POST'])
+def cover_create_test(gen_id):
+    test_name = request.form.get('test_name', '').strip()
+    if not test_name:
+        flash('Укажите название теста', 'error')
+        return redirect(url_for('cover_detail', gen_id=gen_id))
+
+    test = cover_module.create_ab_test_from_generation(gen_id, test_name)
+    flash(f'A/B тест «{test_name}» создан из сгенерированных обложек', 'success')
+    return redirect(url_for('ab_test_detail', test_id=test.id))
+
+
+@app.route('/covers/<int:gen_id>/delete', methods=['POST'])
+def delete_generation(gen_id):
+    gen = CoverGeneration.query.get_or_404(gen_id)
+    db.session.delete(gen)
+    db.session.commit()
+    flash('Генерация удалена', 'success')
+    return redirect(url_for('covers'))
+
+
+# ── n8n Интеграция ────────────────────────────────────────────────────────────
+
+@app.route('/n8n')
+def n8n_dashboard():
+    events = n8n_module.get_event_log(limit=50)
+    settings = Settings.query.first()
+    return render_template('n8n.html', events=events, settings=settings)
+
+
+@app.route('/n8n/test-webhook', methods=['POST'])
+def n8n_test_webhook():
+    """Отправляет тестовое событие на n8n для проверки соединения."""
+    from modules.n8n_integration import _send_event
+    event = _send_event('test_ping', {'message': 'WB Tool ping', 'source': 'manual_test'})
+    if event.status == 'sent':
+        flash(f'Тестовое событие отправлено успешно (HTTP {event.response_code})', 'success')
+    else:
+        flash(f'Ошибка отправки: {event.error_message}', 'error')
+    return redirect(url_for('n8n_dashboard'))
+
+
+@app.route('/n8n/webhook', methods=['POST'])
+def n8n_incoming_webhook():
+    """Входящий вебхук от n8n для выполнения команд."""
+    settings = Settings.query.first()
+    secret = settings.n8n_secret if settings else ''
+
+    # Проверка подписи
+    if secret:
+        sig = request.headers.get('X-Webhook-Signature', '')
+        if not n8n_module.verify_incoming_signature(secret, request.get_data(), sig):
+            return jsonify({'ok': False, 'error': 'Invalid signature'}), 401
+
+    data = request.get_json(force=True) or {}
+    result = n8n_module.handle_incoming(data)
+    return jsonify(result)
+
+
+# ── REST API (для n8n HTTP-узлов) ─────────────────────────────────────────────
+
+@app.route('/api/v1/tests', methods=['GET'])
+def api_get_tests():
+    tests = ABTest.query.all()
+    return jsonify([
+        {
+            'id': t.id,
+            'name': t.name,
+            'status': t.status,
+            'product_id': t.product_id,
+            'product_name': t.product.name if t.product else '',
+            'wb_article': t.product.wb_article if t.product else '',
+            'created_at': t.created_at.isoformat(),
+        }
+        for t in tests
+    ])
+
+
+@app.route('/api/v1/tests/<int:test_id>', methods=['GET'])
+def api_get_test(test_id):
+    test = ABTest.query.get_or_404(test_id)
+    return jsonify({
+        'id': test.id,
+        'name': test.name,
+        'status': test.status,
+        'target_ctr': test.target_ctr,
+        'min_impressions': test.min_impressions,
+        'product_id': test.product_id,
+        'product_name': test.product.name if test.product else '',
+        'wb_article': test.product.wb_article if test.product else '',
+        'variants': [
+            {
+                'id': v.id,
+                'name': v.name,
+                'impressions': v.impressions,
+                'clicks': v.clicks,
+                'ctr': v.ctr,
+                'is_winner': v.is_winner,
+                'image_filename': v.image_filename,
+            }
+            for v in test.variants
+        ],
+    })
+
+
+@app.route('/api/v1/variants/<int:variant_id>/stats', methods=['POST'])
+def api_update_variant_stats(variant_id):
+    data = request.get_json(force=True) or {}
+    variant = ABVariant.query.get_or_404(variant_id)
+    variant.impressions = int(data.get('impressions', variant.impressions))
+    variant.clicks = int(data.get('clicks', variant.clicks))
+    db.session.commit()
+    return jsonify({'ok': True, 'ctr': variant.ctr})
+
+
+@app.route('/api/v1/covers', methods=['GET'])
+def api_get_covers():
+    gens = CoverGeneration.query.order_by(CoverGeneration.created_at.desc()).limit(20).all()
+    return jsonify([
+        {
+            'id': g.id,
+            'product_id': g.product_id,
+            'style': g.style,
+            'status': g.status,
+            'images': g.images,
+            'created_at': g.created_at.isoformat(),
+        }
+        for g in gens
+    ])
+
+
+@app.route('/api/v1/covers/generate', methods=['POST'])
+def api_generate_cover():
+    data = request.get_json(force=True) or {}
+    product_id = data.get('product_id')
+    product = Product.query.get(product_id)
+    if not product:
+        return jsonify({'ok': False, 'error': 'Product not found'}), 404
+
+    settings = Settings.query.first()
+    style = data.get('style', 'product_photo')
+    custom_prompt = data.get('custom_prompt', '')
+    prompt = cover_module.build_prompt(product.name, product.category, style, custom_prompt)
+
+    gen = CoverGeneration(
+        product_id=product_id,
+        prompt=prompt,
+        style=style,
+        ai_provider=settings.ai_provider if settings else 'openai',
+        ai_model=settings.ai_model if settings else 'dall-e-3',
+    )
+    db.session.add(gen)
+    db.session.commit()
+
+    t = threading.Thread(target=cover_module.generate_covers, args=(gen.id,))
+    t.daemon = True
+    t.start()
+
+    return jsonify({'ok': True, 'generation_id': gen.id, 'status': 'pending'})
 
 
 if __name__ == '__main__':

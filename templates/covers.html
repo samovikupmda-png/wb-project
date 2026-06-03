@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Генератор обложек{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Генератор обложек AI</h1>
+    <p class="page-subtitle">Создавайте обложки для товаров с помощью искусственного интеллекта</p>
+</div>
+
+<!-- Форма генерации -->
+<div class="card" style="margin-bottom:24px">
+    <div class="card-header">
+        <h2 class="card-title">Новая генерация</h2>
+    </div>
+    <form method="POST" action="{{ url_for('generate_cover') }}" class="form-grid">
+        <div class="form-group">
+            <label class="form-label">Товар</label>
+            <select name="product_id" class="form-control" required>
+                <option value="">— выберите товар —</option>
+                {% for p in products %}
+                <option value="{{ p.id }}">{{ p.name }} (арт. {{ p.wb_article }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Стиль обложки</label>
+            <select name="style" class="form-control">
+                <option value="product_photo">Профессиональное фото товара</option>
+                <option value="lifestyle">Lifestyle / в интерьере</option>
+                <option value="minimalist">Минимализм</option>
+                <option value="bold">Яркий / выразительный</option>
+            </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label">Дополнительный промпт <span style="color:var(--text-muted);font-weight:400">(необязательно)</span></label>
+            <input type="text" name="custom_prompt" class="form-control"
+                   placeholder="Например: синий фон, осенние листья, деревянная поверхность...">
+        </div>
+        <div style="grid-column:1/-1">
+            <button type="submit" class="btn btn-primary">✦ Сгенерировать обложки</button>
+        </div>
+    </form>
+</div>
+
+<!-- История генераций -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">История генераций</h2>
+        <span class="badge badge-neutral">{{ generations|length }}</span>
+    </div>
+    {% if not generations %}
+    <div class="empty-state">
+        <p>Ещё не было ни одной генерации. Создайте первую выше.</p>
+    </div>
+    {% else %}
+    <div class="generations-grid">
+        {% for gen in generations %}
+        <div class="gen-card">
+            <div class="gen-card-header">
+                <div>
+                    <div class="gen-product">{{ gen.product.name if gen.product else '—' }}</div>
+                    <div class="gen-meta">{{ gen.style }} · {{ gen.ai_provider }}/{{ gen.ai_model }}</div>
+                </div>
+                <span class="badge badge-{{ 'success' if gen.status == 'done' else ('error' if gen.status == 'error' else 'warning') }}">
+                    {{ gen.status }}
+                </span>
+            </div>
+            {% if gen.images %}
+            <div class="gen-images">
+                {% for img in gen.images[:2] %}
+                <img src="{{ url_for('static', filename='uploads/' ~ img) }}" alt="Обложка" class="gen-thumb">
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="gen-actions">
+                <a href="{{ url_for('cover_detail', gen_id=gen.id) }}" class="btn btn-sm btn-secondary">Подробнее</a>
+                <form method="POST" action="{{ url_for('delete_generation', gen_id=gen.id) }}" style="display:inline">
+                    <button type="submit" class="btn btn-sm btn-danger"
+                            onclick="return confirm('Удалить генерацию?')">Удалить</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

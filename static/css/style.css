@@ -356,3 +356,79 @@ tr:hover td { background: #fafafa; }
 .text-danger    { color: var(--danger); }
 .fw-600 { font-weight: 600; }
 .fw-700 { font-weight: 700; }
+
+/* ── Генератор обложек ──────────────────────────────────────────────────── */
+.generations-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 20px;
+}
+.gen-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.gen-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 14px 16px 10px;
+}
+.gen-product { font-weight: 600; font-size: 14px; }
+.gen-meta    { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.gen-images  { display: flex; gap: 4px; padding: 0 16px 10px; }
+.gen-thumb   { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; }
+.gen-actions { padding: 0 16px 14px; display: flex; gap: 8px; }
+
+.cover-images-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
+.cover-image-wrap { text-align: center; }
+.cover-full-img   { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.cover-image-label { font-size: 13px; font-weight: 600; margin-top: 8px; }
+
+/* Spinner */
+.spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── n8n панель ─────────────────────────────────────────────────────────── */
+.code-block {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: monospace;
+    font-size: 13px;
+    word-break: break-all;
+    color: var(--text-primary);
+}
+.command-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.command-list code {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    color: var(--primary);
+}

@@ -3,3 +3,6 @@ flask-sqlalchemy==3.1.1
 requests==2.31.0
 python-dotenv==1.0.0
 Werkzeug==3.0.1
+openai==1.35.0
+Pillow==10.3.0
+APScheduler==3.10.4

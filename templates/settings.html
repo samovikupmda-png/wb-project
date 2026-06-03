@@ -53,11 +53,64 @@
                        value="{{ settings.image_ai_api_key or '' }}"
                        placeholder="OpenAI API-ключ для генерации обложек">
                 <div class="form-hint">
-                    Используется для автогенерации вариантов обложек на основе анализа конкурентов.
+                    Используется для автогенерации вариантов обложек.
                     <div class="api-status" style="margin-top: 6px;">
                         <div class="api-dot {% if settings.image_ai_api_key %}connected{% else %}disconnected{% endif %}"></div>
                         {% if settings.image_ai_api_key %}Ключ добавлен{% else %}Не подключён{% endif %}
                     </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">AI Провайдер</label>
+                <select name="ai_provider" class="form-control">
+                    <option value="openai" {% if settings.ai_provider == 'openai' %}selected{% endif %}>OpenAI (DALL-E)</option>
+                    <option value="stability" {% if settings.ai_provider == 'stability' %}selected{% endif %}>Stability AI</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Модель</label>
+                <select name="ai_model" class="form-control">
+                    <option value="dall-e-3" {% if settings.ai_model == 'dall-e-3' %}selected{% endif %}>DALL-E 3 (рекомендуется)</option>
+                    <option value="dall-e-2" {% if settings.ai_model == 'dall-e-2' %}selected{% endif %}>DALL-E 2</option>
+                    <option value="stable-diffusion-xl-1024-v1-0" {% if settings.ai_model == 'stable-diffusion-xl-1024-v1-0' %}selected{% endif %}>Stable Diffusion XL</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- n8n Интеграция -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">n8n Интеграция</span>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">n8n Webhook URL</label>
+                <input type="url" name="n8n_webhook_url" class="form-control"
+                       value="{{ settings.n8n_webhook_url or '' }}"
+                       placeholder="https://your-n8n.com/webhook/xxxxx">
+                <div class="form-hint">URL вебхука из узла «Webhook» в вашем n8n-воркфлоу.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Секрет подписи (необязательно)</label>
+                <input type="password" name="n8n_secret" class="form-control"
+                       value="{{ settings.n8n_secret or '' }}"
+                       placeholder="Секрет для верификации подписи X-Webhook-Signature">
+                <div class="form-hint">Используется для проверки подлинности вебхуков в обоих направлениях.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Уведомления</label>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                        <input type="checkbox" name="n8n_notify_on_complete"
+                               {% if settings.n8n_notify_on_complete %}checked{% endif %}>
+                        <span>Уведомлять при завершении A/B теста</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                        <input type="checkbox" name="n8n_notify_on_winner"
+                               {% if settings.n8n_notify_on_winner %}checked{% endif %}>
+                        <span>Уведомлять при определении победителя</span>
+                    </label>
                 </div>
             </div>
         </div>

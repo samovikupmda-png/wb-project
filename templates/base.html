@@ -26,10 +26,14 @@
                     <span class="nav-icon">◻</span>
                     <span>Мои товары</span>
                 </a>
-                <div class="nav-section">AB-тестирование</div>
+                <div class="nav-section">Обложки</div>
+                <a href="{{ url_for('covers') }}" class="nav-item {% if 'cover' in request.endpoint %}active{% endif %}">
+                    <span class="nav-icon">✦</span>
+                    <span>Генератор AI</span>
+                </a>
                 <a href="{{ url_for('ab_tests') }}" class="nav-item {% if 'ab_test' in request.endpoint %}active{% endif %}">
                     <span class="nav-icon">⟺</span>
-                    <span>Тесты обложек</span>
+                    <span>A/B тесты</span>
                 </a>
                 <div class="nav-section">Аналитика</div>
                 <a href="{{ url_for('analytics') }}" class="nav-item {% if request.endpoint == 'analytics' %}active{% endif %}">
@@ -41,6 +45,10 @@
                     <span>Реклама</span>
                 </a>
                 <div class="nav-section">Система</div>
+                <a href="{{ url_for('n8n_dashboard') }}" class="nav-item {% if 'n8n' in request.endpoint %}active{% endif %}">
+                    <span class="nav-icon">⇄</span>
+                    <span>n8n интеграция</span>
+                </a>
                 <a href="{{ url_for('settings') }}" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
                     <span class="nav-icon">⚙</span>
                     <span>Настройки</span>

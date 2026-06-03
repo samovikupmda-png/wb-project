@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% block title %}n8n интеграция{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">n8n интеграция</h1>
+    <p class="page-subtitle">Автоматизация через вебхуки и REST API</p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+
+    <!-- Статус подключения -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Подключение к n8n</h2>
+            {% if settings and settings.n8n_webhook_url %}
+            <span class="badge badge-success">настроено</span>
+            {% else %}
+            <span class="badge badge-warning">не настроено</span>
+            {% endif %}
+        </div>
+        <div style="padding:0 20px 20px">
+            {% if settings and settings.n8n_webhook_url %}
+            <div class="detail-row" style="padding:8px 0;border-bottom:1px solid var(--border)">
+                <span class="detail-label">Webhook URL</span>
+                <span style="font-size:12px;word-break:break-all;color:var(--text-muted)">{{ settings.n8n_webhook_url }}</span>
+            </div>
+            <div class="detail-row" style="padding:8px 0;border-bottom:1px solid var(--border)">
+                <span class="detail-label">Уведомлять при завершении теста</span>
+                <span>{{ 'Да' if settings.n8n_notify_on_complete else 'Нет' }}</span>
+            </div>
+            <div class="detail-row" style="padding:8px 0;margin-bottom:16px">
+                <span class="detail-label">Уведомлять при победителе</span>
+                <span>{{ 'Да' if settings.n8n_notify_on_winner else 'Нет' }}</span>
+            </div>
+            <form method="POST" action="{{ url_for('n8n_test_webhook') }}">
+                <button type="submit" class="btn btn-primary">⇄ Отправить тестовое событие</button>
+            </form>
+            {% else %}
+            <p style="color:var(--text-muted);font-size:14px;margin-bottom:16px">
+                Укажите Webhook URL в настройках для активации интеграции.
+            </p>
+            <a href="{{ url_for('settings') }}" class="btn btn-secondary">⚙ Открыть настройки</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Входящий вебхук -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Входящий вебхук</h2>
+            <span class="badge badge-neutral">POST</span>
+        </div>
+        <div style="padding:0 20px 20px">
+            <p style="font-size:14px;color:var(--text-muted);margin-bottom:12px">
+                Используйте этот URL в n8n для отправки команд в WB Tools:
+            </p>
+            <div class="code-block">{{ request.host_url }}n8n/webhook</div>
+
+            <div style="margin-top:16px">
+                <div class="form-label" style="margin-bottom:8px">Доступные команды (action):</div>
+                <ul class="command-list">
+                    <li><code>get_tests</code> — список всех тестов</li>
+                    <li><code>get_test_stats</code> + <code>test_id</code> — статистика теста</li>
+                    <li><code>update_stats</code> + <code>variant_id</code>, <code>impressions</code>, <code>clicks</code></li>
+                    <li><code>complete_test</code> + <code>test_id</code>, <code>winner_variant_id</code></li>
+                    <li><code>generate_cover</code> + <code>product_id</code>, <code>style</code>, <code>custom_prompt</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- REST API -->
+<div class="card" style="margin-bottom:24px">
+    <div class="card-header">
+        <h2 class="card-title">REST API для n8n HTTP-узлов</h2>
+    </div>
+    <div style="padding:0 20px 20px">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Метод</th>
+                    <th>Endpoint</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-success">GET</span></td>
+                    <td><code>/api/v1/tests</code></td>
+                    <td>Список всех A/B тестов</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-success">GET</span></td>
+                    <td><code>/api/v1/tests/{id}</code></td>
+                    <td>Детали теста с вариантами</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-warning">POST</span></td>
+                    <td><code>/api/v1/variants/{id}/stats</code></td>
+                    <td>Обновить impressions/clicks варианта</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-success">GET</span></td>
+                    <td><code>/api/v1/covers</code></td>
+                    <td>История генераций обложек</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-warning">POST</span></td>
+                    <td><code>/api/v1/covers/generate</code></td>
+                    <td>Запустить AI-генерацию обложки</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Лог событий -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Лог событий</h2>
+        <span class="badge badge-neutral">{{ events|length }}</span>
+    </div>
+    {% if not events %}
+    <div class="empty-state">
+        <p>Событий пока не было. Они появятся, когда WB Tools начнёт отправлять уведомления в n8n.</p>
+    </div>
+    {% else %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Событие</th>
+                <th>Статус</th>
+                <th>HTTP</th>
+                <th>Время</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ev in events %}
+            <tr>
+                <td style="color:var(--text-muted)">{{ ev.id }}</td>
+                <td><code>{{ ev.event_type }}</code></td>
+                <td>
+                    <span class="badge badge-{{ 'success' if ev.status == 'sent' else ('error' if ev.status == 'error' else 'warning') }}">
+                        {{ ev.status }}
+                    </span>
+                </td>
+                <td>{{ ev.response_code or '—' }}</td>
+                <td style="color:var(--text-muted);font-size:13px">{{ ev.created_at.strftime('%d.%m %H:%M:%S') }}</td>
+            </tr>
+            {% if ev.error_message %}
+            <tr>
+                <td colspan="5" style="font-size:12px;color:var(--danger);padding-top:0">
+                    {{ ev.error_message }}
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% endblock %}

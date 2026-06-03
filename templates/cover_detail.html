@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% block title %}Генерация #{{ gen.id }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px">
+        <a href="{{ url_for('covers') }}" class="btn btn-sm btn-secondary">← Назад</a>
+        <h1 class="page-title" style="margin:0">Генерация #{{ gen.id }}</h1>
+        <span class="badge badge-{{ 'success' if gen.status == 'done' else ('error' if gen.status == 'error' else 'warning') }}"
+              id="gen-status-badge">{{ gen.status }}</span>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:24px">
+
+    <!-- Изображения -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Сгенерированные обложки</h2>
+        </div>
+        <div id="images-container">
+            {% if gen.status == 'pending' %}
+            <div class="empty-state" id="loading-state">
+                <div class="spinner"></div>
+                <p>Генерация в процессе... Страница обновится автоматически.</p>
+            </div>
+            {% elif gen.status == 'error' %}
+            <div class="empty-state">
+                <p style="color:var(--danger)">Ошибка: {{ gen.error_message }}</p>
+            </div>
+            {% elif gen.images %}
+            <div class="cover-images-grid">
+                {% for img in gen.images %}
+                <div class="cover-image-wrap">
+                    <img src="{{ url_for('static', filename='uploads/' ~ img) }}"
+                         alt="Вариант {{ loop.index }}" class="cover-full-img">
+                    <div class="cover-image-label">Вариант {{ loop.index }}</div>
+                    <a href="{{ url_for('static', filename='uploads/' ~ img) }}"
+                       download="{{ img }}" class="btn btn-sm btn-secondary" style="margin-top:8px">
+                        Скачать
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state"><p>Изображений нет.</p></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Боковая панель -->
+    <div>
+        <!-- Информация -->
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h2 class="card-title">Параметры</h2></div>
+            <div class="detail-list">
+                <div class="detail-row">
+                    <span class="detail-label">Товар</span>
+                    <span>{{ gen.product.name if gen.product else '—' }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Стиль</span>
+                    <span>{{ gen.style }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Провайдер</span>
+                    <span>{{ gen.ai_provider }} / {{ gen.ai_model }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Создано</span>
+                    <span>{{ gen.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                </div>
+            </div>
+            <div style="padding:0 20px 16px">
+                <div class="form-label" style="margin-bottom:6px">Промпт</div>
+                <div style="background:var(--bg-secondary);border-radius:8px;padding:12px;font-size:13px;color:var(--text-muted);line-height:1.5">
+                    {{ gen.prompt }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Создать A/B тест -->
+        {% if gen.status == 'done' and gen.images %}
+        <div class="card">
+            <div class="card-header"><h2 class="card-title">Запустить A/B тест</h2></div>
+            <div style="padding:0 20px 20px">
+                <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px">
+                    Создайте A/B тест прямо из этих {{ gen.images|length }} обложек
+                </p>
+                <form method="POST" action="{{ url_for('cover_create_test', gen_id=gen.id) }}">
+                    <div class="form-group">
+                        <input type="text" name="test_name" class="form-control"
+                               placeholder="Название теста" required
+                               value="AI тест — {{ gen.product.name if gen.product else '' }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%">
+                        ⟺ Создать A/B тест
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if gen.ab_test_id %}
+        <div class="card" style="margin-top:16px">
+            <div style="padding:16px 20px">
+                <a href="{{ url_for('ab_test_detail', test_id=gen.ab_test_id) }}" class="btn btn-secondary" style="width:100%">
+                    Перейти к A/B тесту
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if gen.status == 'pending' %}
+<script>
+(function poll() {
+    setTimeout(function() {
+        fetch('{{ url_for("cover_status", gen_id=gen.id) }}')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'pending') { poll(); return; }
+                location.reload();
+            })
+            .catch(() => poll());
+    }, 3000);
+})();
+</script>
+{% endif %}
+{% endblock %}
